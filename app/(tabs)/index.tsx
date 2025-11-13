@@ -48,7 +48,7 @@ const DEMO_SESSIONS: Session[] = [
   },
   {
     id: "s3",
-    student: "Amina Hello Khan",
+    student: "Amina Khan",
     subject: "Pre-Algebra — Ratios",
     start: "Fri, 5:00 PM",
     length: "90 min",
@@ -63,6 +63,78 @@ const DEMO_SESSIONS: Session[] = [
     length: "60 min",
     meet: "https://meet.google.com/wri-te-456",
     tutor: "K. Lin",
+  },
+  {
+    id: "s5",
+    student: "Sophia Lee",
+    subject: "Science — Ecosystems",
+    start: "Tue, 5:00 PM",
+    length: "60 min",
+    meet: "https://meet.google.com/sci-eco-001",
+    tutor: "J. Patel",
+  },
+  {
+    id: "s6",
+    student: "Noah Kim",
+    subject: "Algebra — Equations",
+    start: "Wed, 7:00 PM",
+    length: "60 min",
+    meet: "https://meet.google.com/al-g-bra",
+    tutor: "Mihith",
+  },
+  {
+    id: "s7",
+    student: "Isabella Cruz",
+    subject: "Reading — Comprehension",
+    start: "Thu, 6:30 PM",
+    length: "60 min",
+    meet: "https://meet.google.com/read-123",
+    tutor: "TBD",
+  },
+  {
+    id: "s8",
+    student: "Liam Johnson",
+    subject: "Geometry — Angles",
+    start: "Fri, 4:00 PM",
+    length: "60 min",
+    meet: "https://meet.google.com/geo-456",
+    tutor: "K. Lin",
+  },
+  {
+    id: "s9",
+    student: "Olivia Brown",
+    subject: "Writing — Essays",
+    start: "Sat, 10:00 AM",
+    length: "90 min",
+    meet: "https://meet.google.com/write-789",
+    tutor: "J. Patel",
+  },
+  {
+    id: "s10",
+    student: "Ethan Smith",
+    subject: "Math — Decimals",
+    start: "Sat, 1:00 PM",
+    length: "60 min",
+    meet: "https://meet.google.com/math-101",
+    tutor: "M. Mandala",
+  },
+  {
+    id: "s11",
+    student: "Mia Garcia",
+    subject: "Science — Forces",
+    start: "Sun, 11:00 AM",
+    length: "60 min",
+    meet: "https://meet.google.com/sci-202",
+    tutor: "TBD",
+  },
+  {
+    id: "s12",
+    student: "James Wilson",
+    subject: "Pre-Algebra — Integers",
+    start: "Sun, 2:00 PM",
+    length: "60 min",
+    meet: "https://meet.google.com/pre-int",
+    tutor: "Mihith",
   },
 ];
 
@@ -82,34 +154,42 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <View style={styles.logoBox}>
-            <Image source={swLogo} style={styles.logoImage} resizeMode="contain" />
-          </View>
-          <View>
-            <Text style={styles.brandTiny}>StudyWiser</Text>
-            <Text style={styles.brandTitle}>Dashboard</Text>
-          </View>
-        </View>
-
-        <View style={styles.headerRight}>
-          <IconButton onPress={() => {}}>
-            <Ionicons name="notifications-outline" size={18} color={PRIMARY} />
-          </IconButton>
-          <IconButton onPress={() => {}}>
-            <Ionicons name="add" size={20} color={PRIMARY} />
-          </IconButton>
-        </View>
-      </View>
-
       <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: 40 }}
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <View style={styles.logoBox}>
+              <Image
+                source={swLogo}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
+            </View>
+            <View>
+              <Text style={styles.brandTiny}>StudyWiser</Text>
+              <Text style={styles.brandTitle}>Dashboard</Text>
+            </View>
+          </View>
+
+          <View style={styles.headerRight}>
+            <IconButton onPress={() => {}}>
+              <Ionicons
+                name="notifications-outline"
+                size={18}
+                color={PRIMARY}
+              />
+            </IconButton>
+            <IconButton onPress={() => {}}>
+              <Ionicons name="add" size={20} color={PRIMARY} />
+            </IconButton>
+          </View>
+        </View>
+
         {/* Search */}
         <View style={styles.searchRow}>
           <View style={{ flex: 1 }}>
@@ -150,6 +230,9 @@ export default function HomeScreen() {
             )}
           </View>
         </View>
+
+        {/* TEMP: make sure there's enough content to scroll */}
+        <View style={{ height: 600 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -249,6 +332,13 @@ function SessionRow({ s }: { s: Session }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#ffffff" },
+
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
 
   header: {
     paddingHorizontal: 16,
