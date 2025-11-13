@@ -48,7 +48,7 @@ const DEMO_SESSIONS: Session[] = [
   },
   {
     id: "s3",
-    student: "Amina Khan",
+    student: "Amina Hello Khan",
     subject: "Pre-Algebra — Ratios",
     start: "Fri, 5:00 PM",
     length: "90 min",
@@ -105,51 +105,52 @@ export default function HomeScreen() {
       </View>
 
       <ScrollView
-  style={{ flex: 1 }}
-  contentContainerStyle={{ paddingBottom: 40 }}
-  showsVerticalScrollIndicator={false}
->
-  {/* Search */}
-  <View style={styles.searchRow}>
-    <View style={{ flex: 1 }}>
-      <View style={styles.searchIcon}>
-        <Ionicons name="search" size={16} color="#94a3b8" />
-      </View>
-      <TextInput
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search students, subjects, tutors…"
-        placeholderTextColor="#94a3b8"
-        style={[styles.input, { paddingLeft: 36 }]}
-      />
-    </View>
-    <Button onPress={() => setQuery("")} label="Clear" />
-  </View>
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Search */}
+        <View style={styles.searchRow}>
+          <View style={{ flex: 1 }}>
+            <View style={styles.searchIcon}>
+              <Ionicons name="search" size={16} color="#94a3b8" />
+            </View>
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search students, subjects, tutors…"
+              placeholderTextColor="#94a3b8"
+              style={[styles.input, { paddingLeft: 36 }]}
+            />
+          </View>
+          <Button onPress={() => setQuery("")} label="Clear" />
+        </View>
 
-  {/* Stats */}
-  <View style={styles.statsRow}>
-    <Stat label="Upcoming" value="4" />
-    <Stat label="Tutors" value="8" />
-    <Stat label="Requests" value="3" />
-  </View>
+        {/* Stats */}
+        <View style={styles.statsRow}>
+          <Stat label="Upcoming" value="4" />
+          <Stat label="Tutors" value="8" />
+          <Stat label="Requests" value="3" />
+        </View>
 
-  {/* Upcoming list */}
-  <View style={styles.card}>
-    <View style={styles.cardHeader}>
-      <Text style={styles.cardTitle}>Upcoming Sessions</Text>
-      <Button label="View all" small onPress={() => {}} />
-    </View>
+        {/* Upcoming list */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Upcoming Sessions</Text>
+            <Button label="View all" small onPress={() => {}} />
+          </View>
 
-    <View style={styles.cardBody}>
-      {filtered.map((s) => (
-        <SessionRow key={s.id} s={s} />
-      ))}
-      {filtered.length === 0 && (
-        <Text style={styles.emptyText}>No matches found.</Text>
-      )}
-    </View>
-  </View>
-</ScrollView>
+          <View style={styles.cardBody}>
+            {filtered.map((s) => (
+              <SessionRow key={s.id} s={s} />
+            ))}
+            {filtered.length === 0 && (
+              <Text style={styles.emptyText}>No matches found.</Text>
+            )}
+          </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -461,3 +462,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 });
+
