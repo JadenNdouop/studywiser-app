@@ -218,7 +218,7 @@ export default function FindScreen() {
             )}
           </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterStrip}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexShrink: 0 }} contentContainerStyle={styles.filterStrip}>
             {SUBJECT_FILTERS.map((f) => (
               <TouchableOpacity
                 key={f}
