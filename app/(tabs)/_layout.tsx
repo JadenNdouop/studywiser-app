@@ -4,9 +4,9 @@ import { Platform, StyleSheet, TouchableOpacity, View } from "react-native";
 
 const TAB_ICONS: Record<string, [focused: string, unfocused: string]> = {
   index:    ["home",        "home-outline"],
-  chat:     ["compass",     "compass-outline"],
-  profile:  ["person",      "person-outline"],
+  explore:  ["compass",     "compass-outline"],
   sessions: ["calendar",    "calendar-outline"],
+  profile:  ["person",      "person-outline"],
 };
 
 function FloatingTabBar({ state, navigation }: any) {
@@ -52,9 +52,9 @@ export default function TabLayout() {
       screenOptions={{ headerShown: false }}
     >
       <Tabs.Screen name="index" />
-      <Tabs.Screen name="chat" />
-      <Tabs.Screen name="profile" />
+      <Tabs.Screen name="explore" />
       <Tabs.Screen name="sessions" />
+      <Tabs.Screen name="profile" />
     </Tabs>
   );
 }
