@@ -14,6 +14,8 @@ export default function RootLayout() {
       <Stack.Screen name="profile-password"       options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="profile-privacy"        options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="profile-help"           options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="notifications"           options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="message-detail"          options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="(tabs)" options={{ animation: "fade" }} />
     </Stack>
   );

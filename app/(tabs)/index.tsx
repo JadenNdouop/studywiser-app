@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -50,6 +51,7 @@ const STATS = [
 
 /* ─── Screen ─── */
 export default function HomeScreen() {
+  const router = useRouter();
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView
@@ -63,7 +65,7 @@ export default function HomeScreen() {
             <Text style={styles.dateText}>{TODAY_DATE}</Text>
           </View>
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.iconBtn}>
+            <TouchableOpacity style={styles.iconBtn} onPress={() => router.push("/notifications")}>
               <Ionicons name="notifications-outline" size={20} color={PRIMARY} />
             </TouchableOpacity>
           </View>
