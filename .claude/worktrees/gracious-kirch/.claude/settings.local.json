@@ -3,7 +3,8 @@
     "allow": [
       "Bash(git worktree:*)",
       "Bash(git branch:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(ls /Users/jadenndouop/studywiser-app/app/\\\\\\(tabs\\\\\\)/)"
     ]
   }
 }
