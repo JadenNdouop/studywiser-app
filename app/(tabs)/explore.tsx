@@ -201,7 +201,7 @@ export default function FindScreen() {
 
       {role === "tutor" ? (
         /* ── TUTOR VIEW ── */
-        <>
+        <View style={{ flex: 1 }}>
           <View style={styles.searchBar}>
             <Ionicons name="search-outline" size={17} color="#94a3b8" style={{ marginRight: 8 }} />
             <TextInput
@@ -234,7 +234,7 @@ export default function FindScreen() {
             {filtered.length} open request{filtered.length !== 1 ? "s" : ""}
           </Text>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.feed}>
+          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.feed}>
             {filtered.length === 0 ? (
               <View style={styles.empty}>
                 <Ionicons name="search-outline" size={48} color="#cbd5e1" />
@@ -247,10 +247,10 @@ export default function FindScreen() {
               ))
             )}
           </ScrollView>
-        </>
+        </View>
       ) : (
         /* ── PARENT VIEW ── */
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.parentFeed}>
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.parentFeed}>
           <TouchableOpacity style={styles.postBanner} onPress={() => setShowPostModal(true)} activeOpacity={0.85}>
             <View style={styles.postBannerLeft}>
               <Ionicons name="add-circle-outline" size={28} color="#fff" />
