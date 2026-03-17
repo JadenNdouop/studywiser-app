@@ -4,7 +4,7 @@ import { Platform, StyleSheet, TouchableOpacity, View } from "react-native";
 
 const TAB_ICONS: Record<string, [focused: string, unfocused: string]> = {
   index:    ["home",        "home-outline"],
-  chat:     ["chatbubble",  "chatbubble-outline"],
+  chat:     ["compass",     "compass-outline"],
   profile:  ["person",      "person-outline"],
   sessions: ["calendar",    "calendar-outline"],
 };
