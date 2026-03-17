@@ -218,7 +218,7 @@ export default function FindScreen() {
             )}
           </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexShrink: 0 }} contentContainerStyle={styles.filterStrip}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScrollView} contentContainerStyle={styles.filterStrip}>
             {SUBJECT_FILTERS.map((f) => (
               <TouchableOpacity
                 key={f}
@@ -577,7 +577,8 @@ const styles = StyleSheet.create({
     borderRadius: 14, marginHorizontal: 20, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 12,
   },
   searchInput: { flex: 1, fontSize: 14, color: "#1e293b" },
-  filterStrip: { paddingHorizontal: 20, gap: 8, paddingBottom: 12 },
+  filterScrollView: { height: 44, flexGrow: 0, flexShrink: 0, marginBottom: 10 },
+  filterStrip: { paddingHorizontal: 20, gap: 8, alignItems: "center" },
   filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: CARD_BG },
   filterChipActive: { backgroundColor: PRIMARY },
   filterChipText: { color: "#475569", fontWeight: "600", fontSize: 13 },
