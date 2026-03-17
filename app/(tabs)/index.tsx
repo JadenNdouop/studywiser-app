@@ -1,8 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import {
-  Image,
-  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,543 +11,441 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const PRIMARY = "#014aad";
+const CAL_BG = "#d1d9ff";
+const CARD_BG = "#eef2ff";
 
-// from app/(tabs)/index.tsx → ../../assets/images/swlogo.jpg
-const swLogo = require("../../assets/images/swlogo.jpg");
+/* ─── Demo data ─── */
 
-type Session = {
+// Week: Mon Mar 16 – Sun Mar 22 2026 (today = Tue Mar 17)
+const WEEK = [
+  { label: "MON", date: 16 },
+  { label: "TUE", date: 17 },
+  { label: "WED", date: 18 },
+  { label: "THU", date: 19 },
+  { label: "FRI", date: 20 },
+  { label: "SAT", date: 21 },
+  { label: "SUN", date: 22 },
+];
+const TODAY = 17;
+
+type DaySession = {
   id: string;
+  startHour: number;
   student: string;
   subject: string;
-  start: string;
-  length: string;
-  meet: string;
   tutor: string;
 };
 
-const DEMO_SESSIONS: Session[] = [
-  {
-    id: "s1",
-    student: "Bradley Davis",
-    subject: "Math — Fractions",
-    start: "Today, 6:00 PM",
-    length: "60 min",
-    meet: "https://meet.google.com/abc-defg-hij",
-    tutor: "Mihith",
-  },
-  {
-    id: "s2",
-    student: "Evelyn Park",
-    subject: "Reading — Main Ideas",
-    start: "Thu, 4:30 PM",
-    length: "60 min",
-    meet: "https://meet.google.com/xyz-1234-zzz",
-    tutor: "TBD",
-  },
-  {
-    id: "s3",
-    student: "Amina Khan",
-    subject: "Pre-Algebra — Ratios",
-    start: "Fri, 5:00 PM",
-    length: "90 min",
-    meet: "https://meet.google.com/rat-io-123",
-    tutor: "M. Mandala",
-  },
-  {
-    id: "s4",
-    student: "Leo Carter",
-    subject: "Writing — Structure",
-    start: "Mon, 3:30 PM",
-    length: "60 min",
-    meet: "https://meet.google.com/wri-te-456",
-    tutor: "K. Lin",
-  },
-  {
-    id: "s5",
-    student: "Sophia Lee",
-    subject: "Science — Ecosystems",
-    start: "Tue, 5:00 PM",
-    length: "60 min",
-    meet: "https://meet.google.com/sci-eco-001",
-    tutor: "J. Patel",
-  },
-  {
-    id: "s6",
-    student: "Noah Kim",
-    subject: "Algebra — Equations",
-    start: "Wed, 7:00 PM",
-    length: "60 min",
-    meet: "https://meet.google.com/al-g-bra",
-    tutor: "Mihith",
-  },
-  {
-    id: "s7",
-    student: "Isabella Cruz",
-    subject: "Reading — Comprehension",
-    start: "Thu, 6:30 PM",
-    length: "60 min",
-    meet: "https://meet.google.com/read-123",
-    tutor: "TBD",
-  },
-  {
-    id: "s8",
-    student: "Liam Johnson",
-    subject: "Geometry — Angles",
-    start: "Fri, 4:00 PM",
-    length: "60 min",
-    meet: "https://meet.google.com/geo-456",
-    tutor: "K. Lin",
-  },
-  {
-    id: "s9",
-    student: "Olivia Brown",
-    subject: "Writing — Essays",
-    start: "Sat, 10:00 AM",
-    length: "90 min",
-    meet: "https://meet.google.com/write-789",
-    tutor: "J. Patel",
-  },
-  {
-    id: "s10",
-    student: "Ethan Smith",
-    subject: "Math — Decimals",
-    start: "Sat, 1:00 PM",
-    length: "60 min",
-    meet: "https://meet.google.com/math-101",
-    tutor: "M. Mandala",
-  },
-  {
-    id: "s11",
-    student: "Mia Garcia",
-    subject: "Science — Forces",
-    start: "Sun, 11:00 AM",
-    length: "60 min",
-    meet: "https://meet.google.com/sci-202",
-    tutor: "TBD",
-  },
-  {
-    id: "s12",
-    student: "James Wilson",
-    subject: "Pre-Algebra — Integers",
-    start: "Sun, 2:00 PM",
-    length: "60 min",
-    meet: "https://meet.google.com/pre-int",
-    tutor: "Mihith",
-  },
+const SCHEDULE: Record<number, DaySession[]> = {
+  17: [{ id: "d1", startHour: 10, student: "Bradley Davis", subject: "Math — Fractions", tutor: "Mihith" }],
+  18: [{ id: "d2", startHour: 9, student: "Evelyn Park", subject: "Reading — Main Ideas", tutor: "TBD" }],
+  19: [{ id: "d3", startHour: 11, student: "Amina Khan", subject: "Pre-Algebra — Ratios", tutor: "M. Mandala" }],
+  20: [
+    { id: "d4", startHour: 9, student: "Leo Carter", subject: "Writing — Structure", tutor: "K. Lin" },
+    { id: "d5", startHour: 11, student: "Sophia Lee", subject: "Science — Ecosystems", tutor: "J. Patel" },
+  ],
+  21: [{ id: "d6", startHour: 10, student: "Olivia Brown", subject: "Writing — Essays", tutor: "J. Patel" }],
+};
+
+const HOURS = [9, 10, 11, 12];
+
+type Tutor = {
+  id: string;
+  name: string;
+  subject: string;
+  rating: number;
+  reviews: number;
+  sessions: number;
+  favorited: boolean;
+  initials: string;
+  avatarColor: string;
+};
+
+const TUTORS: Tutor[] = [
+  { id: "t1", name: "Sarah Johnson, M.Ed.", subject: "Mathematics", rating: 5, reviews: 60, sessions: 120, favorited: true, initials: "SJ", avatarColor: "#c7d2fe" },
+  { id: "t2", name: "Marcus Chen, Ph.D.", subject: "Science & Physics", rating: 4.5, reviews: 40, sessions: 85, favorited: false, initials: "MC", avatarColor: "#ddd6fe" },
+  { id: "t3", name: "Aisha Williams, B.Ed.", subject: "English & Writing", rating: 5, reviews: 150, sessions: 200, favorited: false, initials: "AW", avatarColor: "#fde8d8" },
+  { id: "t4", name: "Robert Kim, M.S.", subject: "Computer Science", rating: 4.8, reviews: 90, sessions: 140, favorited: true, initials: "RK", avatarColor: "#d1fae5" },
 ];
 
-export default function HomeScreen() {
-  const [query, setQuery] = useState("");
+/* ─── Main screen ─── */
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return DEMO_SESSIONS;
-    return DEMO_SESSIONS.filter(
-      (s) =>
-        s.student.toLowerCase().includes(q) ||
-        s.subject.toLowerCase().includes(q) ||
-        s.tutor.toLowerCase().includes(q)
-    );
-  }, [query]);
+export default function HomeScreen() {
+  const [selectedDate, setSelectedDate] = useState(TODAY);
+  const [search, setSearch] = useState("");
+
+  const todaySessions = SCHEDULE[selectedDate] ?? [];
+  const dayName = WEEK.find((d) => d.date === selectedDate)?.label ?? "";
+  const dayLabel = `${selectedDate} ${dayName.charAt(0) + dayName.slice(1).toLowerCase()}${selectedDate === TODAY ? " - Today" : ""}`;
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.scrollContent}
       >
-        {/* Header */}
+        {/* ── Header ── */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <View style={styles.logoBox}>
-              <Image
-                source={swLogo}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
+            <View style={styles.avatarCircle}>
+              <Text style={styles.avatarInitial}>J</Text>
             </View>
             <View>
-              <Text style={styles.brandTiny}>StudyWiser</Text>
-              <Text style={styles.brandTitle}>Dashboard</Text>
+              <Text style={styles.hiText}>Hi, Welcome Back</Text>
+              <Text style={styles.nameText}>John Doe</Text>
             </View>
           </View>
-
-          <View style={styles.headerRight}>
-            <IconButton onPress={() => {}}>
-              <Ionicons
-                name="notifications-outline"
-                size={18}
-                color={PRIMARY}
-              />
-            </IconButton>
-            <IconButton onPress={() => {}}>
-              <Ionicons name="add" size={20} color={PRIMARY} />
-            </IconButton>
+          <View style={styles.headerIcons}>
+            <TouchableOpacity style={styles.iconBtn}>
+              <Ionicons name="notifications-outline" size={20} color={PRIMARY} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconBtn}>
+              <Ionicons name="settings-outline" size={20} color={PRIMARY} />
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Search */}
-        <View style={styles.searchRow}>
-          <View style={{ flex: 1 }}>
-            <View style={styles.searchIcon}>
-              <Ionicons name="search" size={16} color="#94a3b8" />
-            </View>
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search students, subjects, tutors…"
-              placeholderTextColor="#94a3b8"
-              style={[styles.input, { paddingLeft: 36 }]}
-            />
-          </View>
-          <Button onPress={() => setQuery("")} label="Clear" />
+        {/* ── Search ── */}
+        <View style={styles.searchBar}>
+          <Ionicons name="options-outline" size={18} color="#94a3b8" style={{ marginRight: 8 }} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search tutors, subjects…"
+            placeholderTextColor="#94a3b8"
+            value={search}
+            onChangeText={setSearch}
+          />
+          <Ionicons name="search-outline" size={18} color="#94a3b8" />
         </View>
 
-        {/* Stats */}
-        <View style={styles.statsRow}>
-          <Stat label="Upcoming" value="4" />
-          <Stat label="Tutors" value="8" />
-          <Stat label="Requests" value="3" />
-        </View>
+        {/* ── Lavender calendar + schedule section ── */}
+        <View style={styles.calSection}>
+          {/* Week strip */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.weekStrip}
+          >
+            {WEEK.map((day) => {
+              const isSelected = day.date === selectedDate;
+              const isToday = day.date === TODAY;
+              return (
+                <TouchableOpacity
+                  key={day.date}
+                  style={[styles.dayPill, isSelected && styles.dayPillActive]}
+                  onPress={() => setSelectedDate(day.date)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.dayLabel, isSelected && styles.dayLabelActive]}>
+                    {day.date}
+                  </Text>
+                  <Text style={[styles.dayName, isSelected && styles.dayNameActive]}>
+                    {day.label}
+                  </Text>
+                  {isToday && !isSelected && <View style={styles.todayDot} />}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
 
-        {/* Upcoming list */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Upcoming Sessions</Text>
-            <Button label="View all" small onPress={() => {}} />
-          </View>
+          {/* Day schedule */}
+          <View style={styles.scheduleCard}>
+            <Text style={styles.scheduleDate}>{dayLabel}</Text>
 
-          <View style={styles.cardBody}>
-            {filtered.map((s) => (
-              <SessionRow key={s.id} s={s} />
-            ))}
-            {filtered.length === 0 && (
-              <Text style={styles.emptyText}>No matches found.</Text>
+            {HOURS.map((hour) => {
+              const session = todaySessions.find((s) => s.startHour === hour);
+              const isLastHour = hour === HOURS[HOURS.length - 1];
+              return (
+                <View key={hour}>
+                  <View style={styles.hourRow}>
+                    <Text style={styles.hourLabel}>{hour > 12 ? `${hour - 12} PM` : hour === 12 ? "12 PM" : `${hour} AM`}</Text>
+                    <View style={styles.hourLine} />
+                  </View>
+
+                  {session && (
+                    <View style={styles.sessionBlock}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.sessionName}>{session.student}</Text>
+                        <Text style={styles.sessionSubject}>{session.subject}</Text>
+                      </View>
+                      <View style={styles.sessionActions}>
+                        <TouchableOpacity style={styles.actionBtn}>
+                          <Ionicons name="checkmark" size={14} color={PRIMARY} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.actionBtn}>
+                          <Ionicons name="close" size={14} color="#ef4444" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Last hour gets a trailing dashed line */}
+                  {isLastHour && (
+                    <View style={styles.hourRow}>
+                      <View style={styles.hourLineSpacer} />
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+
+            {todaySessions.length === 0 && (
+              <Text style={styles.noSessions}>No sessions scheduled</Text>
             )}
           </View>
         </View>
 
-        {/* TEMP: make sure there's enough content to scroll */}
-        <View style={{ height: 600 }} />
+        {/* ── Tutor cards ── */}
+        <View style={styles.section}>
+          {TUTORS.map((t) => (
+            <TutorCard key={t.id} tutor={t} />
+          ))}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-/* ---------- Small helpers ---------- */
+/* ─── Tutor card component ─── */
 
-function IconButton({
-  children,
-  onPress,
-}: {
-  children: React.ReactNode;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity onPress={onPress} style={styles.iconButton}>
-      {children}
-    </TouchableOpacity>
-  );
-}
-
-function Button({
-  label,
-  onPress,
-  small,
-}: {
-  label: string;
-  onPress: () => void;
-  small?: boolean;
-}) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      style={[styles.button, small && styles.buttonSmall]}
-    >
-      <Text style={[styles.buttonText, small && styles.buttonTextSmall]}>
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-    </View>
-  );
-}
-
-function SessionRow({ s }: { s: Session }) {
-  const firstName = s.student.split(" ")[0] || "";
-  const initial = firstName[0]?.toUpperCase() ?? "?";
+function TutorCard({ tutor }: { tutor: Tutor }) {
+  const [fav, setFav] = useState(tutor.favorited);
+  const fullStars = Math.floor(tutor.rating);
+  const halfStar = tutor.rating % 1 >= 0.5;
 
   return (
-    <View style={styles.sessionRow}>
-      <View style={styles.sessionTop}>
-        <View style={styles.sessionLeft}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initial}</Text>
+    <View style={styles.tutorCard}>
+      {/* Avatar */}
+      <View style={[styles.tutorAvatar, { backgroundColor: tutor.avatarColor }]}>
+        <Text style={styles.tutorInitials}>{tutor.initials}</Text>
+      </View>
+
+      {/* Info */}
+      <View style={styles.tutorInfo}>
+        <Text style={styles.tutorName}>{tutor.name}</Text>
+        <Text style={styles.tutorSubject}>{tutor.subject}</Text>
+
+        {/* Rating + sessions row */}
+        <View style={styles.tutorMeta}>
+          <View style={styles.metaItem}>
+            {[...Array(fullStars)].map((_, i) => (
+              <Ionicons key={i} name="star" size={12} color={PRIMARY} />
+            ))}
+            {halfStar && <Ionicons name="star-half" size={12} color={PRIMARY} />}
+            <Text style={styles.metaText}> {tutor.rating}</Text>
           </View>
-          <View style={{ flexShrink: 1 }}>
-            <Text numberOfLines={1} style={styles.sessionStudent}>
-              {s.student}
-            </Text>
-            <Text style={styles.sessionTutor}>Tutor: {s.tutor}</Text>
+          <View style={styles.metaItem}>
+            <Ionicons name="chatbubble-outline" size={12} color={PRIMARY} />
+            <Text style={styles.metaText}> {tutor.reviews}</Text>
           </View>
         </View>
+      </View>
 
-        <TouchableOpacity
-          onPress={() => Linking.openURL(s.meet)}
-          style={styles.videoButton}
-        >
-          <Ionicons name="videocam-outline" size={18} color={PRIMARY} />
+      {/* Action buttons */}
+      <View style={styles.tutorActions}>
+        <TouchableOpacity style={styles.roundBtn}>
+          <Ionicons name="information-circle-outline" size={18} color="#94a3b8" />
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.roundBtn, fav && styles.roundBtnActive]} onPress={() => setFav(!fav)}>
+          <Ionicons name={fav ? "heart" : "heart-outline"} size={18} color={fav ? PRIMARY : "#94a3b8"} />
         </TouchableOpacity>
       </View>
-
-      <View style={styles.sessionBottom}>
-        <View style={styles.sessionMetaItem}>
-          <Ionicons name="calendar-outline" size={14} color={PRIMARY} />
-          <Text style={styles.sessionMetaText}>{s.start}</Text>
-        </View>
-        <View style={styles.sessionMetaItem}>
-          <Ionicons name="time-outline" size={14} color={PRIMARY} />
-          <Text style={styles.sessionMetaText}>{s.length}</Text>
-        </View>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{s.subject}</Text>
-        </View>
-      </View>
     </View>
   );
 }
 
-/* ---------- Styles ---------- */
+/* ─── Styles ─── */
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#ffffff" },
+  safe: { flex: 1, backgroundColor: "#fff" },
+  scrollContent: { paddingBottom: 100 },
 
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 40,
-  },
-
+  // Header
   header: {
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 14,
   },
-  headerLeft: {
-    flexDirection: "row",
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  avatarCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: CARD_BG,
     alignItems: "center",
-    gap: 10,
+    justifyContent: "center",
   },
-  headerRight: {
-    flexDirection: "row",
-    gap: 8,
+  avatarInitial: { color: PRIMARY, fontSize: 18, fontWeight: "700" },
+  hiText: { color: PRIMARY, fontSize: 12, fontWeight: "500" },
+  nameText: { color: "#0f172a", fontSize: 16, fontWeight: "700" },
+  headerIcons: { flexDirection: "row", gap: 10 },
+  iconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: CARD_BG,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  logoBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    overflow: "hidden",
-  },
-  logoImage: {
-    width: "100%",
-    height: "100%",
-  },
-  brandTiny: { fontSize: 12, color: "#94a3b8", letterSpacing: 0.6 },
-  brandTitle: { fontSize: 20, fontWeight: "800", color: PRIMARY },
 
-  searchRow: {
+  // Search
+  searchBar: {
     flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 16,
-    marginBottom: 10,
     alignItems: "center",
+    backgroundColor: CARD_BG,
+    borderRadius: 14,
+    marginHorizontal: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
   },
-  searchIcon: {
-    position: "absolute",
-    left: 12,
-    top: 12,
+  searchInput: { flex: 1, fontSize: 14, color: "#1e293b" },
+
+  // Calendar section
+  calSection: {
+    backgroundColor: CAL_BG,
+    borderRadius: 24,
+    marginHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
+    marginBottom: 20,
   },
-  input: {
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 12,
-    paddingVertical: 10,
+  weekStrip: {
     paddingHorizontal: 12,
-    fontSize: 14,
-    color: "#0f172a",
-  },
-
-  statsRow: {
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 16,
+    gap: 6,
     marginBottom: 12,
   },
-  stat: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
+  dayPill: {
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 16,
-    backgroundColor: "white",
-    padding: 12,
+    minWidth: 52,
+    gap: 4,
   },
-  statLabel: { color: "#64748b", fontSize: 12, marginBottom: 4 },
-  statValue: { color: PRIMARY, fontSize: 18, fontWeight: "700" },
+  dayPillActive: { backgroundColor: PRIMARY },
+  dayLabel: { fontSize: 18, fontWeight: "700", color: "#1e293b" },
+  dayLabelActive: { color: "#fff" },
+  dayName: { fontSize: 11, fontWeight: "500", color: "#475569" },
+  dayNameActive: { color: "rgba(255,255,255,0.8)" },
+  todayDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: PRIMARY,
+    marginTop: 2,
+  },
 
-  card: {
-    backgroundColor: "white",
+  // Schedule card
+  scheduleCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    marginHorizontal: 12,
+    padding: 14,
+  },
+  scheduleDate: {
+    textAlign: "right",
+    color: PRIMARY,
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 10,
+  },
+  hourRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 2,
+  },
+  hourLabel: { width: 44, fontSize: 11, color: "#94a3b8", fontWeight: "500" },
+  hourLine: {
+    flex: 1,
+    height: 1,
+    borderStyle: "dashed",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+  },
+  hourLineSpacer: { flex: 1 },
+  sessionBlock: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: CARD_BG,
+    borderRadius: 12,
+    padding: 10,
+    marginLeft: 52,
+    marginBottom: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: PRIMARY,
+  },
+  sessionName: { color: PRIMARY, fontSize: 13, fontWeight: "700" },
+  sessionSubject: { color: "#64748b", fontSize: 11, marginTop: 2 },
+  sessionActions: { flexDirection: "row", gap: 6, marginLeft: 8 },
+  actionBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#cbd5e1",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
+  noSessions: {
+    textAlign: "center",
+    color: "#94a3b8",
+    fontSize: 13,
+    paddingVertical: 12,
+  },
+
+  // Tutors section
+  section: {
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  tutorCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
     borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    marginHorizontal: 16,
-    marginBottom: 18,
     shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 1,
   },
-  cardHeader: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  cardBody: {
-    paddingHorizontal: 14,
-    paddingBottom: 14,
-    gap: 10,
-  },
-  cardTitle: { color: "#0f172a", fontWeight: "700", fontSize: 14 },
-  emptyText: { color: "#64748b", fontSize: 13 },
-
-  button: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "white",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  buttonSmall: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  buttonText: {
-    color: PRIMARY,
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  buttonTextSmall: {
-    fontSize: 12,
-  },
-
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+  tutorAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "white",
-    borderWidth: 1,
+    marginRight: 12,
+  },
+  tutorInitials: { fontSize: 20, fontWeight: "700", color: PRIMARY },
+  tutorInfo: { flex: 1 },
+  tutorName: { color: PRIMARY, fontSize: 14, fontWeight: "700", marginBottom: 2 },
+  tutorSubject: { color: "#475569", fontSize: 12, marginBottom: 6 },
+  tutorMeta: { flexDirection: "row", gap: 14 },
+  metaItem: { flexDirection: "row", alignItems: "center" },
+  metaText: { color: "#475569", fontSize: 12 },
+  tutorActions: { gap: 8, marginLeft: 8 },
+  roundBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1.5,
     borderColor: "#e2e8f0",
-  },
-
-  sessionRow: {
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 16,
-    padding: 12,
-    backgroundColor: "white",
-  },
-  sessionTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  sessionLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flexShrink: 1,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(1,74,173,0.10)",
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#fff",
   },
-  avatarText: {
-    color: PRIMARY,
-    fontWeight: "800",
-    fontSize: 18,
-  },
-  sessionStudent: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#0f172a",
-  },
-  sessionTutor: {
-    fontSize: 12,
-    color: "#475569",
-  },
-  videoButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-
-  sessionBottom: {
-    marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  sessionMetaItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  sessionMetaText: {
-    color: "#334155",
-    fontSize: 12,
-  },
-  badge: {
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: "#f8fafc",
-  },
-  badgeText: {
-    color: PRIMARY,
-    fontWeight: "700",
-    fontSize: 12,
+  roundBtnActive: {
+    backgroundColor: CARD_BG,
+    borderColor: PRIMARY,
   },
 });
-

@@ -1,34 +1,20 @@
-// app/(tabs)/_layout.tsx
-import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
+import { Stack } from "expo-router";
 
-export default function TabLayout() {
+export default function RootLayout() {
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: "#014aad",
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" color={color} size={size} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="sessions"
-        options={{
-          title: "Sessions",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" color={color} size={size} />
-          ),
-        }}
-      />
-    </Tabs>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" options={{ animation: "fade" }} />
+      <Stack.Screen name="welcome" options={{ animation: "fade" }} />
+      <Stack.Screen name="login" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="signup" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="set-password"           options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="profile-edit"           options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="profile-settings"       options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="profile-notifications"  options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="profile-password"       options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="profile-privacy"        options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="profile-help"           options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="(tabs)" options={{ animation: "fade" }} />
+    </Stack>
   );
 }
