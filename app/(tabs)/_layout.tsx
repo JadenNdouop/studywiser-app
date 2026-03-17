@@ -11,6 +11,7 @@ export default function TabLayout() {
         tabBarActiveTintColor: "#ffffff",
         tabBarInactiveTintColor: "rgba(255,255,255,0.5)",
         tabBarStyle: styles.tabBar,
+        tabBarItemStyle: styles.tabBarItem,
         tabBarBackground: () => <View style={styles.tabBarBg} />,
       }}
     >
@@ -59,11 +60,21 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: Platform.OS === "ios" ? 24 : 16,
     height: 64,
+    paddingBottom: 0,
+    paddingTop: 0,
     elevation: 10,
     shadowColor: "#014aad",
     shadowOpacity: 0.35,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },
+  },
+  tabBarItem: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 0,
+    paddingTop: 0,
+    height: 64,
   },
   tabBarBg: {
     flex: 1,
