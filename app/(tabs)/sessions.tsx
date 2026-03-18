@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
@@ -82,6 +83,7 @@ const STATUS_BG: Record<Status, string> = {
 
 /* ─── Main screen ─── */
 export default function ScheduleScreen() {
+  const router = useRouter();
   const [role, setRole] = useState<"tutor" | "student">("tutor");
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [sessions, setSessions] = useState({ tutor: TUTOR_SESSIONS, student: STUDENT_SESSIONS });
@@ -134,7 +136,7 @@ export default function ScheduleScreen() {
         <Text style={styles.headerTitle}>Schedule</Text>
         <TouchableOpacity
           style={styles.addBtn}
-          onPress={() => Alert.alert("New Session", "Session booking coming soon!")}
+          onPress={() => router.push("/tutor-profile")}
         >
           <Ionicons name="add" size={22} color="#fff" />
         </TouchableOpacity>
@@ -264,6 +266,7 @@ export default function ScheduleScreen() {
                   onAccept={() => acceptSession(s.id)}
                   onDecline={() => declineSession(s.id)}
                   onCancel={() => cancelSession(s.id, role)}
+                  onViewProfile={() => router.push("/tutor-profile")}
                 />
               ))}
             </View>
@@ -281,17 +284,19 @@ function SessionCard({
   onAccept,
   onDecline,
   onCancel,
+  onViewProfile,
 }: {
   session: Session;
   role: "tutor" | "student";
   onAccept: () => void;
   onDecline: () => void;
   onCancel: () => void;
+  onViewProfile: () => void;
 }) {
   return (
     <View style={cardStyles.card}>
-      {/* Top row */}
-      <View style={cardStyles.top}>
+      {/* Top row — tappable to view tutor/student profile */}
+      <TouchableOpacity style={cardStyles.top} onPress={onViewProfile} activeOpacity={0.75}>
         {/* Avatar */}
         <View style={[cardStyles.avatar, { backgroundColor: s.avatarColor }]}>
           <Text style={cardStyles.avatarText}>{s.initials}</Text>
@@ -314,7 +319,7 @@ function SessionCard({
             {STATUS_LABEL[s.status]}
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
 
       {/* Divider */}
       <View style={cardStyles.divider} />

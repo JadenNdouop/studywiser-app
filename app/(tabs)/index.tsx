@@ -128,7 +128,11 @@ export default function HomeScreen() {
           <View style={styles.upcomingList}>
             {COMING_UP.map((s, i) => (
               <View key={s.id}>
-                <View style={styles.upcomingRow}>
+                <TouchableOpacity
+                  style={styles.upcomingRow}
+                  activeOpacity={0.7}
+                  onPress={() => router.push("/tutor-profile")}
+                >
                   {/* Date pill */}
                   <View style={styles.datePill}>
                     <Text style={styles.datePillDay}>{s.day}</Text>
@@ -149,7 +153,7 @@ export default function HomeScreen() {
                   <View style={[styles.upcomingAvatar, { backgroundColor: s.avatarColor }]}>
                     <Text style={styles.upcomingAvatarText}>{s.initials}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
 
                 {/* Divider (not after last item) */}
                 {i < COMING_UP.length - 1 && <View style={styles.divider} />}
