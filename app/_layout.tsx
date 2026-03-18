@@ -16,6 +16,9 @@ export default function RootLayout() {
       <Stack.Screen name="profile-help"           options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="notifications"           options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="message-detail"          options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="tutor-profile"           options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="book-session"            options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="booking-confirmation"    options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="(tabs)" options={{ animation: "fade" }} />
     </Stack>
   );
