@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../../context/auth";
 
 const PRIMARY = "#014aad";
 const CARD_BG = "#eef2ff";
@@ -32,7 +33,6 @@ type OpenRequest = {
   days: string;
   time: string;
   sessionType: "Online" | "In-Person";
-  budget: string;
   postedAgo: string;
 };
 
@@ -42,7 +42,6 @@ type MyRequest = {
   grade: string;
   days: string;
   time: string;
-  budget: string;
   status: RequestStatus;
   interestedCount: number;
   applicants: string[];
@@ -56,7 +55,7 @@ const INITIAL_OPEN: OpenRequest[] = [
     subject: "Mathematics", subjectTag: "Math",
     description: "Needs help with fractions and pre-algebra. Struggling with word problems.",
     days: "Mon / Wed", time: "4:00 – 5:30 PM", sessionType: "Online",
-    budget: "$25–35/hr", postedAgo: "2h ago",
+    postedAgo: "2h ago",
   },
   {
     id: "r2", initials: "SR", avatarColor: "#fde8d8",
@@ -64,7 +63,7 @@ const INITIAL_OPEN: OpenRequest[] = [
     subject: "English & Reading", subjectTag: "English",
     description: "Looking for reading comprehension help. Loves science-themed books.",
     days: "Tue / Thu", time: "3:30 – 5:00 PM", sessionType: "Online",
-    budget: "$20–30/hr", postedAgo: "5h ago",
+    postedAgo: "5h ago",
   },
   {
     id: "r3", initials: "MT", avatarColor: "#d1fae5",
@@ -72,7 +71,7 @@ const INITIAL_OPEN: OpenRequest[] = [
     subject: "Computer Science", subjectTag: "CS",
     description: "Wants to learn Python basics and intro to programming concepts.",
     days: "Sat", time: "10:00 AM – 12:00 PM", sessionType: "Online",
-    budget: "$40–50/hr", postedAgo: "1d ago",
+    postedAgo: "1d ago",
   },
   {
     id: "r4", initials: "LK", avatarColor: "#fef9c3",
@@ -80,7 +79,7 @@ const INITIAL_OPEN: OpenRequest[] = [
     subject: "Writing", subjectTag: "Writing",
     description: "Building foundational writing skills. Focus on sentence structure and creative writing.",
     days: "Mon / Fri", time: "5:00 – 6:00 PM", sessionType: "In-Person",
-    budget: "$25–35/hr", postedAgo: "1d ago",
+    postedAgo: "1d ago",
   },
   {
     id: "r5", initials: "JB", avatarColor: "#fee2e2",
@@ -88,7 +87,7 @@ const INITIAL_OPEN: OpenRequest[] = [
     subject: "Science", subjectTag: "Science",
     description: "Needs help with biology and chemistry. Preparing for upcoming state exams.",
     days: "Wed / Fri", time: "4:30 – 6:00 PM", sessionType: "Online",
-    budget: "$30–40/hr", postedAgo: "2d ago",
+    postedAgo: "2d ago",
   },
   {
     id: "r6", initials: "NP", avatarColor: "#ddd6fe",
@@ -96,20 +95,20 @@ const INITIAL_OPEN: OpenRequest[] = [
     subject: "Mathematics", subjectTag: "Math",
     description: "Needs help with geometry and basic algebra. Prefers visual explanations.",
     days: "Tue / Thu", time: "5:00 – 6:30 PM", sessionType: "Online",
-    budget: "$25–30/hr", postedAgo: "3d ago",
+    postedAgo: "3d ago",
   },
 ];
 
 const INITIAL_MY: MyRequest[] = [
   {
     id: "m1", subject: "Mathematics", grade: "7th Grade",
-    days: "Mon / Wed", time: "4:00 – 5:30 PM", budget: "$25–35/hr",
+    days: "Mon / Wed", time: "4:00 – 5:30 PM",
     status: "interested", interestedCount: 3,
     applicants: ["Sarah Johnson, M.Ed.", "Marcus Chen, Ph.D.", "Aisha Williams, B.Ed."],
   },
   {
     id: "m2", subject: "English", grade: "7th Grade",
-    days: "Fri", time: "3:00 – 4:00 PM", budget: "$20–30/hr",
+    days: "Fri", time: "3:00 – 4:00 PM",
     status: "open", interestedCount: 0, applicants: [],
   },
 ];
@@ -138,7 +137,8 @@ let nextId = 100;
 
 /* ─── Main screen ─── */
 export default function FindScreen() {
-  const [role, setRole] = useState<"tutor" | "parent">("tutor");
+  const { profile } = useAuth();
+  const role = profile?.role ?? "parent";
   const [subjectFilter, setSubjectFilter] = useState("All");
   const [search, setSearch] = useState("");
   const [openRequests, setOpenRequests] = useState(INITIAL_OPEN);
@@ -179,24 +179,6 @@ export default function FindScreen() {
             <Ionicons name="add" size={22} color="#fff" />
           </TouchableOpacity>
         )}
-      </View>
-
-      {/* Role toggle */}
-      <View style={styles.roleToggle}>
-        <TouchableOpacity
-          style={[styles.roleBtn, role === "tutor" && styles.roleBtnActive]}
-          onPress={() => setRole("tutor")}
-        >
-          <Ionicons name="school-outline" size={15} color={role === "tutor" ? "#fff" : "#64748b"} style={{ marginRight: 5 }} />
-          <Text style={[styles.roleBtnText, role === "tutor" && styles.roleBtnTextActive]}>Tutor</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.roleBtn, role === "parent" && styles.roleBtnActive]}
-          onPress={() => setRole("parent")}
-        >
-          <Ionicons name="people-outline" size={15} color={role === "parent" ? "#fff" : "#64748b"} style={{ marginRight: 5 }} />
-          <Text style={[styles.roleBtnText, role === "parent" && styles.roleBtnTextActive]}>Parent</Text>
-        </TouchableOpacity>
       </View>
 
       {role === "tutor" ? (
@@ -352,10 +334,6 @@ function OpenRequestCard({ req, onClaim }: { req: OpenRequest; onClaim: () => vo
       </View>
 
       <View style={cardStyles.footer}>
-        <View style={cardStyles.budgetRow}>
-          <Ionicons name="cash-outline" size={15} color={PRIMARY} />
-          <Text style={cardStyles.budget}>{req.budget}</Text>
-        </View>
         <TouchableOpacity style={cardStyles.claimBtn} onPress={onClaim} activeOpacity={0.85}>
           <Text style={cardStyles.claimBtnText}>Claim</Text>
           <Ionicons name="arrow-forward" size={15} color="#fff" />
@@ -395,8 +373,6 @@ function MyRequestCard({ req, onViewApplicants }: { req: MyRequest; onViewApplic
       <View style={myCardStyles.metaRow}>
         <Ionicons name="calendar-outline" size={13} color="#64748b" />
         <Text style={myCardStyles.metaText}>{req.days} · {req.time}</Text>
-        <Ionicons name="cash-outline" size={13} color="#64748b" style={{ marginLeft: 8 }} />
-        <Text style={myCardStyles.metaText}>{req.budget}</Text>
       </View>
       {req.status === "interested" && (
         <TouchableOpacity style={myCardStyles.viewBtn} onPress={onViewApplicants} activeOpacity={0.85}>
@@ -425,7 +401,6 @@ function PostRequestModal({
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [time, setTime] = useState("");
   const [sessionType, setSessionType] = useState<"Online" | "In-Person">("Online");
-  const [budget, setBudget] = useState("");
   const [notes, setNotes] = useState("");
 
   const toggleDay = (d: string) =>
@@ -433,7 +408,7 @@ function PostRequestModal({
 
   const reset = () => {
     setChildName(""); setGrade(""); setSubject(""); setSelectedDays([]);
-    setTime(""); setSessionType("Online"); setBudget(""); setNotes("");
+    setTime(""); setSessionType("Online"); setNotes("");
   };
 
   const submit = () => {
@@ -447,7 +422,6 @@ function PostRequestModal({
       grade: grade.trim(),
       days: selectedDays.length > 0 ? selectedDays.join(" / ") : "Flexible",
       time: time.trim() || "Flexible",
-      budget: budget.trim() ? `$${budget.trim()}/hr` : "Negotiable",
       status: "open",
       interestedCount: 0,
       applicants: [],
@@ -522,11 +496,6 @@ function PostRequestModal({
                 </View>
               </Field>
 
-              <Field label="Budget per hour ($)">
-                <TextInput style={modalStyles.input} placeholder="e.g. 25-35" placeholderTextColor="#aab4d4"
-                  value={budget} onChangeText={setBudget} keyboardType="numbers-and-punctuation" />
-              </Field>
-
               <Field label="Additional Notes (optional)">
                 <TextInput style={[modalStyles.input, modalStyles.textArea]}
                   placeholder="Any extra details about your child's needs…"
@@ -564,14 +533,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: { color: "#0f172a", fontSize: 22, fontWeight: "800" },
   addBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: PRIMARY, alignItems: "center", justifyContent: "center" },
-  roleToggle: {
-    flexDirection: "row", marginHorizontal: 20,
-    backgroundColor: CARD_BG, borderRadius: 30, padding: 4, marginBottom: 14,
-  },
-  roleBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: 26 },
-  roleBtnActive: { backgroundColor: PRIMARY },
-  roleBtnText: { color: "#64748b", fontWeight: "600", fontSize: 14 },
-  roleBtnTextActive: { color: "#fff" },
   searchBar: {
     flexDirection: "row", alignItems: "center", backgroundColor: CARD_BG,
     borderRadius: 14, marginHorizontal: 20, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 12,
@@ -631,9 +592,7 @@ const cardStyles = StyleSheet.create({
   metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
   metaPill: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: CARD_BG, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
   metaText: { color: "#334155", fontSize: 12, fontWeight: "500" },
-  footer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  budgetRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  budget: { color: PRIMARY, fontSize: 14, fontWeight: "700" },
+  footer: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end" },
   claimBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: PRIMARY, borderRadius: 22, paddingHorizontal: 18, paddingVertical: 10 },
   claimBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
 });

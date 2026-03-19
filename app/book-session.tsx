@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
+import { usePricing } from "../hooks/usePricing";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -86,9 +87,12 @@ const pg = StyleSheet.create({
 
 export default function BookSessionScreen() {
   const router = useRouter();
+  const { subjects, getPrice, loading: pricingLoading } = usePricing();
 
   const [selectedDay,   setSelectedDay]   = useState(25);
   const [selectedTime,  setSelectedTime]  = useState("4:00 PM");
+  const [subject,       setSubject]       = useState("Algebra 1");
+  const [sessionFormat, setSessionFormat] = useState<"individual" | "group">("individual");
   const [bookingFor,    setBookingFor]    = useState<"Yourself" | "Another Student">("Yourself");
   const [studentName,   setStudentName]   = useState("");
   const [grade,         setGrade]         = useState("8");
@@ -176,8 +180,39 @@ export default function BookSessionScreen() {
           {/* ── Session Details ─────────────────────────────────────────────── */}
           <Text style={[s.sectionTitle, { marginTop: 22 }]}>Session Details</Text>
 
+          {/* Subject */}
+          <Text style={s.fieldLabel}>Subject</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, paddingBottom: 4 }}
+            style={{ flexGrow: 0, height: 42, marginBottom: 14 }}
+          >
+            {subjects.map((sub) => (
+              <TouchableOpacity
+                key={sub}
+                style={[s.gradeChip, subject === sub && s.gradeChipSel]}
+                onPress={() => setSubject(sub)}
+                activeOpacity={0.8}
+              >
+                <Text style={[s.gradeText, subject === sub && s.gradeTextSel]}>{sub}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Session Format */}
+          <Text style={s.fieldLabel}>Session Format</Text>
+          <PillGroup
+            options={["individual", "group"]}
+            selected={sessionFormat}
+            onSelect={(v) => setSessionFormat(v as any)}
+          />
+          <Text style={s.pricePeek}>
+            Rate: ${getPrice(subject, sessionFormat).parentRate}/hr
+          </Text>
+
           {/* Booking for */}
-          <Text style={s.fieldLabel}>Booking For</Text>
+          <Text style={[s.fieldLabel, { marginTop: 14 }]}>Booking For</Text>
           <PillGroup
             options={["Yourself", "Another Student"]}
             selected={bookingFor}
@@ -268,7 +303,21 @@ export default function BookSessionScreen() {
           <TouchableOpacity
             style={s.bookBtn}
             activeOpacity={0.85}
-            onPress={() => router.push("/booking-confirmation")}
+            onPress={() => router.push({
+              pathname: "/booking-confirmation",
+              params: {
+                subject,
+                sessionFormat,
+                sessionType,
+                grade,
+                studentName: bookingFor === "Another Student" ? studentName : "",
+                bookingFor,
+                day: selectedDay,
+                time: selectedTime,
+                recurring: recurring ? recurFreq : "No",
+                notes,
+              },
+            })}
           >
             <Text style={s.bookBtnText}>Review Booking</Text>
             <Ionicons name="arrow-forward" size={18} color={WHITE} />
@@ -390,6 +439,8 @@ const s = StyleSheet.create({
     marginBottom: 10,
   },
   recurSub: { fontSize: 12, color: TEXT_LIGHT, marginTop: 2 },
+
+  pricePeek: { fontSize: 12, color: TEXT_MID, marginTop: 6, marginBottom: 4 },
 
   // Book button
   bookBtn: {

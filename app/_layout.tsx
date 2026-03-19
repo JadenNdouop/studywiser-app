@@ -1,6 +1,17 @@
-import { Stack } from "expo-router";
+import { Stack, router } from "expo-router";
+import { useEffect } from "react";
+import { AuthProvider, useAuth } from "../context/auth";
 
-export default function RootLayout() {
+function RootLayoutNav() {
+  const { session, loading } = useAuth();
+
+  useEffect(() => {
+    if (loading) return;
+    if (session) {
+      router.replace("/(tabs)");
+    }
+  }, [session, loading]);
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" options={{ animation: "fade" }} />
@@ -21,5 +32,13 @@ export default function RootLayout() {
       <Stack.Screen name="booking-confirmation"    options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="(tabs)" options={{ animation: "fade" }} />
     </Stack>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <AuthProvider>
+      <RootLayoutNav />
+    </AuthProvider>
   );
 }

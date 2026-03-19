@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../../context/auth";
 
 const PRIMARY = "#014aad";
 const ICON_BG = "#eef2ff";
@@ -26,6 +27,10 @@ const MENU: { icon: string; label: string; route?: string; danger?: boolean }[] 
 
 export default function ProfileScreen() {
   const [showLogout, setShowLogout] = useState(false);
+  const { profile, signOut } = useAuth();
+
+  const displayName = profile?.full_name ?? "My Profile";
+  const initial = displayName.charAt(0).toUpperCase();
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -44,13 +49,13 @@ export default function ProfileScreen() {
         <View style={styles.avatarSection}>
           <View style={styles.avatarWrap}>
             <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitial}>J</Text>
+              <Text style={styles.avatarInitial}>{initial}</Text>
             </View>
             <TouchableOpacity style={styles.cameraBadge}>
               <Ionicons name="camera-outline" size={14} color="#fff" />
             </TouchableOpacity>
           </View>
-          <Text style={styles.name}>John Doe</Text>
+          <Text style={styles.name}>{displayName}</Text>
         </View>
 
         {/* Menu */}
@@ -99,8 +104,9 @@ export default function ProfileScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.logoutBtn}
-                onPress={() => {
+                onPress={async () => {
                   setShowLogout(false);
+                  await signOut();
                   router.replace("/welcome");
                 }}
               >

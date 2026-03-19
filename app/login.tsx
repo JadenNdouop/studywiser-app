@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -12,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { supabase } from "../lib/supabase";
 
 const PRIMARY = "#014aad";
 const INPUT_BG = "#eef2ff";
@@ -20,6 +22,22 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  async function handleLogin() {
+    if (!email || !password) {
+      Alert.alert("Missing fields", "Please enter your email and password.");
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (error) {
+      Alert.alert("Login failed", error.message);
+    } else {
+      router.replace("/(tabs)");
+    }
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -49,7 +67,7 @@ export default function LoginScreen() {
           </Text>
 
           {/* Email field */}
-          <Text style={styles.label}>Email or Mobile Number</Text>
+          <Text style={styles.label}>Email</Text>
           <TextInput
             style={styles.input}
             placeholder="example@example.com"
@@ -90,15 +108,16 @@ export default function LoginScreen() {
 
           {/* Log In button */}
           <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={() => router.replace("/(tabs)")}
+            style={[styles.primaryBtn, loading && { opacity: 0.7 }]}
+            onPress={handleLogin}
             activeOpacity={0.85}
+            disabled={loading}
           >
-            <Text style={styles.primaryBtnText}>Log In</Text>
+            <Text style={styles.primaryBtnText}>{loading ? "Logging in..." : "Log In"}</Text>
           </TouchableOpacity>
 
           {/* Social divider */}
-          <Text style={styles.orText}>or sign up with</Text>
+          <Text style={styles.orText}>or sign in with</Text>
 
           <View style={styles.socialRow}>
             <TouchableOpacity style={styles.socialBtn}>
@@ -126,10 +145,7 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
+  safe: { flex: 1, backgroundColor: "#fff" },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -138,40 +154,12 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 8,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerTitle: {
-    color: PRIMARY,
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  scroll: {
-    paddingHorizontal: 28,
-    paddingBottom: 40,
-  },
-  heading: {
-    color: PRIMARY,
-    fontSize: 24,
-    fontWeight: "700",
-    marginBottom: 8,
-    marginTop: 8,
-  },
-  subheading: {
-    color: "#64748b",
-    fontSize: 13,
-    lineHeight: 20,
-    marginBottom: 28,
-  },
-  label: {
-    color: "#1e293b",
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: 8,
-  },
+  backBtn: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
+  headerTitle: { color: PRIMARY, fontSize: 18, fontWeight: "700" },
+  scroll: { paddingHorizontal: 28, paddingBottom: 40 },
+  heading: { color: PRIMARY, fontSize: 24, fontWeight: "700", marginBottom: 8, marginTop: 8 },
+  subheading: { color: "#64748b", fontSize: 13, lineHeight: 20, marginBottom: 28 },
+  label: { color: "#1e293b", fontSize: 14, fontWeight: "500", marginBottom: 8 },
   input: {
     backgroundColor: INPUT_BG,
     borderRadius: 12,
@@ -189,18 +177,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingRight: 14,
   },
-  eyeBtn: {
-    padding: 4,
-  },
-  forgotWrap: {
-    alignItems: "flex-end",
-    marginBottom: 28,
-  },
-  forgotText: {
-    color: PRIMARY,
-    fontSize: 13,
-    fontWeight: "500",
-  },
+  eyeBtn: { padding: 4 },
+  forgotWrap: { alignItems: "flex-end", marginBottom: 28 },
+  forgotText: { color: PRIMARY, fontSize: 13, fontWeight: "500" },
   primaryBtn: {
     backgroundColor: PRIMARY,
     borderRadius: 30,
@@ -208,23 +187,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  primaryBtnText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  orText: {
-    textAlign: "center",
-    color: "#94a3b8",
-    fontSize: 13,
-    marginBottom: 16,
-  },
-  socialRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 16,
-    marginBottom: 32,
-  },
+  primaryBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  orText: { textAlign: "center", color: "#94a3b8", fontSize: 13, marginBottom: 16 },
+  socialRow: { flexDirection: "row", justifyContent: "center", gap: 16, marginBottom: 32 },
   socialBtn: {
     width: 48,
     height: 48,
@@ -234,17 +199,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  switchRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-  },
-  switchText: {
-    color: "#64748b",
-    fontSize: 13,
-  },
-  switchLink: {
-    color: PRIMARY,
-    fontSize: 13,
-    fontWeight: "600",
-  },
+  switchRow: { flexDirection: "row", justifyContent: "center" },
+  switchText: { color: "#64748b", fontSize: 13 },
+  switchLink: { color: PRIMARY, fontSize: 13, fontWeight: "600" },
 });

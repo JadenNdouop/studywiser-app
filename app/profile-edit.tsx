@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -12,15 +13,45 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../context/auth";
+import { supabase } from "../lib/supabase";
 
 const PRIMARY = "#014aad";
 const INPUT_BG = "#eef2ff";
 
 export default function EditProfileScreen() {
-  const [name, setName] = useState("John Doe");
-  const [phone, setPhone] = useState("+123 567 89000");
-  const [email, setEmail] = useState("johndoe@example.com");
+  const { profile, user, refreshProfile } = useAuth();
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [dob, setDob] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (profile) {
+      setName(profile.full_name ?? "");
+      setPhone(profile.phone ?? "");
+      setEmail(profile.email ?? "");
+    }
+  }, [profile]);
+
+  async function handleSave() {
+    if (!user) return;
+    setLoading(true);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ full_name: name, phone, email })
+      .eq("id", user.id);
+    setLoading(false);
+    if (error) {
+      Alert.alert("Error", error.message);
+    } else {
+      await refreshProfile();
+      router.back();
+    }
+  }
+
+  const initial = (name || "?").charAt(0).toUpperCase();
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -34,9 +65,7 @@ export default function EditProfileScreen() {
             <Ionicons name="chevron-back" size={24} color={PRIMARY} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Profile</Text>
-          <TouchableOpacity style={styles.backBtn}>
-            <Ionicons name="settings-outline" size={22} color={PRIMARY} />
-          </TouchableOpacity>
+          <View style={styles.backBtn} />
         </View>
 
         <ScrollView
@@ -48,7 +77,7 @@ export default function EditProfileScreen() {
           <View style={styles.avatarSection}>
             <View style={styles.avatarWrap}>
               <View style={styles.avatarCircle}>
-                <Text style={styles.avatarInitial}>J</Text>
+                <Text style={styles.avatarInitial}>{initial}</Text>
               </View>
               <TouchableOpacity style={styles.cameraBadge}>
                 <Ionicons name="camera-outline" size={14} color="#fff" />
@@ -56,7 +85,6 @@ export default function EditProfileScreen() {
             </View>
           </View>
 
-          {/* Fields */}
           <Text style={styles.label}>Full Name</Text>
           <TextInput
             style={styles.input}
@@ -87,16 +115,17 @@ export default function EditProfileScreen() {
             style={[styles.input, { marginBottom: 36 }]}
             value={dob}
             onChangeText={setDob}
-            placeholder="DD / MM / YYY"
+            placeholder="DD / MM / YYYY"
             placeholderTextColor="#aab4d4"
           />
 
           <TouchableOpacity
-            style={styles.saveBtn}
-            onPress={() => router.back()}
+            style={[styles.saveBtn, loading && { opacity: 0.7 }]}
+            onPress={handleSave}
             activeOpacity={0.85}
+            disabled={loading}
           >
-            <Text style={styles.saveBtnText}>Update Profile</Text>
+            <Text style={styles.saveBtnText}>{loading ? "Saving..." : "Update Profile"}</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>

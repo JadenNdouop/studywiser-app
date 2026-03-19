@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"firebase\\\\|supabase\\\\|mongodb\\\\|prisma\" /Users/jadenndouop/studywiser-app --include=*.json --include=*.ts --include=*.tsx)",
+      "Bash(npx expo:*)",
+      "Bash(cp -r /Users/jadenndouop/studywiser-app/lib /Users/jadenndouop/studywiser-app/.claude/worktrees/mystifying-black/lib)",
+      "Bash(cp -r /Users/jadenndouop/studywiser-app/context /Users/jadenndouop/studywiser-app/.claude/worktrees/mystifying-black/context)",
+      "Bash(npx tsc:*)",
+      "Bash(cat:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

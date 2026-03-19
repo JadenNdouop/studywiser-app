@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
+import { SessionFormat, TIER_LABELS } from "../constants/pricing";
+import { usePricing } from "../hooks/usePricing";
 import {
   Modal,
   ScrollView,
@@ -33,8 +35,26 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 export default function BookingConfirmationScreen() {
   const router = useRouter();
-  const [confirmed, setConfirmed] = useState(false);
+  const { getPrice, subjectTiers } = usePricing();
+  const params = useLocalSearchParams<{
+    subject: string;
+    sessionFormat: SessionFormat;
+    sessionType: string;
+    grade: string;
+    studentName: string;
+    bookingFor: string;
+    day: string;
+    time: string;
+    recurring: string;
+    notes: string;
+  }>();
   const [showSuccess, setShowSuccess] = useState(false);
+
+  const subject = params.subject ?? "Algebra 1";
+  const sessionFormat = (params.sessionFormat ?? "individual") as SessionFormat;
+  const { parentRate } = getPrice(subject, sessionFormat);
+  const tier = subjectTiers[subject] ?? "basic";
+  const tierLabel = TIER_LABELS[tier];
 
   function handleConfirm() {
     setShowSuccess(true);
@@ -94,42 +114,43 @@ export default function BookingConfirmationScreen() {
 
         {/* ── Booking Details ─────────────────────────────────────────────── */}
         <View style={s.detailCard}>
-          <DetailRow label="Booking For"    value="Another Student" />
+          <DetailRow label="Subject"        value={subject} />
           <View style={s.divider} />
-          <DetailRow label="Student Name"   value="Jane Doe" />
+          <DetailRow label="Tier"           value={tierLabel} />
           <View style={s.divider} />
-          <DetailRow label="Grade"          value="Grade 8" />
+          <DetailRow label="Format"         value={sessionFormat === "individual" ? "Individual" : "Group"} />
           <View style={s.divider} />
-          <DetailRow label="Session Type"   value="Online" />
+          {params.bookingFor === "Another Student" && params.studentName ? (
+            <>
+              <DetailRow label="Student"    value={params.studentName} />
+              <View style={s.divider} />
+              <DetailRow label="Grade"      value={`Grade ${params.grade}`} />
+              <View style={s.divider} />
+            </>
+          ) : null}
+          <DetailRow label="Session Type"   value={params.sessionType ?? "Online"} />
           <View style={s.divider} />
-          <DetailRow label="Recurring"      value="Weekly" />
-          <View style={s.divider} />
-          <DetailRow label="Tutor Rate"     value="$45 / hr" />
+          <DetailRow label="Recurring"      value={params.recurring ?? "No"} />
         </View>
 
         {/* ── Notes ───────────────────────────────────────────────────────── */}
-        <View style={s.notesCard}>
-          <Text style={s.notesLabel}>Notes / Learning Goals</Text>
-          <Text style={s.notesText}>
-            Focus on building confidence with Algebra 2 — specifically solving
-            systems of equations and graphing. Preparing for upcoming midterms.
-          </Text>
-        </View>
+        {params.notes ? (
+          <View style={s.notesCard}>
+            <Text style={s.notesLabel}>Notes / Learning Goals</Text>
+            <Text style={s.notesText}>{params.notes}</Text>
+          </View>
+        ) : null}
 
         {/* ── Pricing summary ─────────────────────────────────────────────── */}
         <View style={s.priceCard}>
           <View style={s.priceRow}>
             <Text style={s.priceLabel}>Session (60 min)</Text>
-            <Text style={s.priceVal}>$45.00</Text>
-          </View>
-          <View style={s.priceRow}>
-            <Text style={s.priceLabel}>Platform fee</Text>
-            <Text style={s.priceVal}>$2.50</Text>
+            <Text style={s.priceVal}>${parentRate}.00</Text>
           </View>
           <View style={[s.divider, { marginVertical: 10 }]} />
           <View style={s.priceRow}>
             <Text style={[s.priceLabel, { fontWeight: "800", color: TEXT_DARK }]}>Total</Text>
-            <Text style={[s.priceVal, { fontWeight: "800", color: PRIMARY, fontSize: 16 }]}>$47.50</Text>
+            <Text style={[s.priceVal, { fontWeight: "800", color: PRIMARY, fontSize: 16 }]}>${parentRate}.00</Text>
           </View>
         </View>
 
