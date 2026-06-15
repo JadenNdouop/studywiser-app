@@ -1,5 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Linking from "expo-linking";
+import * as LocalAuthentication from "expo-local-authentication";
 import { router } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import {
   Alert,
@@ -15,8 +18,21 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 
+WebBrowser.maybeCompleteAuthSession();
+
 const PRIMARY = "#014aad";
 const INPUT_BG = "#eef2ff";
+
+async function navigateByRole(userId: string) {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .single();
+  if (profile?.role === "tutor")        router.replace("/(tutor-tabs)");
+  else if (profile?.role === "student") router.replace("/(student-tabs)");
+  else                                  router.replace("/(parent-tabs)");
+}
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -30,12 +46,84 @@ export default function LoginScreen() {
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
+      setLoading(false);
       Alert.alert("Login failed", error.message);
-    } else {
-      router.replace("/(tabs)");
+      return;
+    }
+    if (data.user) {
+      await navigateByRole(data.user.id);
+    }
+    setLoading(false);
+  }
+
+  async function handleOAuth(provider: "google" | "facebook") {
+    setLoading(true);
+    try {
+      const redirectTo = Linking.createURL("/");
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo, skipBrowserRedirect: true },
+      });
+      if (error) throw error;
+      if (!data.url) throw new Error("No OAuth URL returned");
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      if (result.type === "success") {
+        const fragment = result.url.split("#")[1] ?? "";
+        const params = new URLSearchParams(fragment);
+        const accessToken  = params.get("access_token");
+        const refreshToken = params.get("refresh_token");
+        if (accessToken && refreshToken) {
+          const { data: sessionData } = await supabase.auth.setSession({
+            access_token:  accessToken,
+            refresh_token: refreshToken,
+          });
+          if (sessionData.session?.user) {
+            await navigateByRole(sessionData.session.user.id);
+          }
+        }
+      }
+    } catch (err: any) {
+      Alert.alert("Sign in failed", err.message ?? "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleBiometric() {
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled  = await LocalAuthentication.isEnrolledAsync();
+      if (!hasHardware || !isEnrolled) {
+        Alert.alert(
+          "Biometrics unavailable",
+          "Your device doesn't have biometrics configured. Please log in with your email and password."
+        );
+        return;
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        Alert.alert(
+          "No saved session",
+          "Log in with your email and password first. After that, biometrics will work on future visits."
+        );
+        return;
+      }
+
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: "Sign in to StudyWiser",
+        cancelLabel:   "Cancel",
+        fallbackLabel: "Use password",
+      });
+
+      if (result.success) {
+        await navigateByRole(session.user.id);
+      }
+    } catch (err: any) {
+      Alert.alert("Error", err.message);
     }
   }
 
@@ -120,13 +208,28 @@ export default function LoginScreen() {
           <Text style={styles.orText}>or sign in with</Text>
 
           <View style={styles.socialRow}>
-            <TouchableOpacity style={styles.socialBtn}>
+            <TouchableOpacity
+              style={styles.socialBtn}
+              activeOpacity={0.7}
+              onPress={() => handleOAuth("google")}
+              disabled={loading}
+            >
               <Ionicons name="logo-google" size={22} color={PRIMARY} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.socialBtn}>
+            <TouchableOpacity
+              style={styles.socialBtn}
+              activeOpacity={0.7}
+              onPress={() => handleOAuth("facebook")}
+              disabled={loading}
+            >
               <Ionicons name="logo-facebook" size={22} color={PRIMARY} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.socialBtn}>
+            <TouchableOpacity
+              style={styles.socialBtn}
+              activeOpacity={0.7}
+              onPress={handleBiometric}
+              disabled={loading}
+            >
               <Ionicons name="finger-print" size={22} color={PRIMARY} />
             </TouchableOpacity>
           </View>

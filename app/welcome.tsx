@@ -20,8 +20,8 @@ export default function WelcomeScreen() {
         {/* Bottom area */}
         <View style={styles.bottom}>
           <Text style={styles.tagline}>
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-            eiusmod tempor incididunt ut labore et dolore magna aliqua.
+            Connect with expert tutors, track progress, and achieve your
+            academic goals — all in one place.
           </Text>
 
           <TouchableOpacity

@@ -71,6 +71,7 @@ export default function HelpCenterScreen() {
         </View>
       </View>
 
+      <View style={styles.content}>
       {/* FAQ / Contact toggle */}
       <View style={styles.tabRow}>
         <TouchableOpacity
@@ -161,18 +162,20 @@ export default function HelpCenterScreen() {
           ))}
         </ScrollView>
       )}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#fff" },
+  safe: { flex: 1, backgroundColor: PRIMARY },
 
   blueHeader: {
     backgroundColor: PRIMARY,
     paddingBottom: 20,
     paddingHorizontal: 20,
   },
+  content: { flex: 1, backgroundColor: "#fff" },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",

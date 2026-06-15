@@ -7,14 +7,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const PRIMARY = "#014aad";
 
 const INITIAL = [
-  { key: "general",  label: "General Notification", on: true },
-  { key: "sound",    label: "Sound",                 on: true },
-  { key: "calls",    label: "Sound Call",            on: true },
-  { key: "vibrate",  label: "Vibrate",               on: false },
-  { key: "offers",   label: "Special Offers",        on: false },
-  { key: "payments", label: "Payments",              on: true },
-  { key: "promo",    label: "Promo And Discount",    on: false },
-  { key: "cashback", label: "Cashback",              on: true },
+  { key: "reminders",  label: "Session Reminders",  on: true },
+  { key: "matches",    label: "New Match Found",     on: true },
+  { key: "payments",   label: "Payment Alerts",      on: true },
+  { key: "messages",   label: "Messages",            on: true },
+  { key: "email",      label: "Email Notifications", on: false },
 ];
 
 export default function NotificationSettingScreen() {

@@ -1,5 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Linking from "expo-linking";
 import { router } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import {
   Alert,
@@ -13,6 +15,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { supabase } from "../lib/supabase";
+
+WebBrowser.maybeCompleteAuthSession();
 
 const PRIMARY = "#014aad";
 const INPUT_BG = "#eef2ff";
@@ -22,7 +27,56 @@ export default function SignUpScreen() {
   const [email, setEmail] = useState("");
   const [mobile, setMobile] = useState("");
   const [dob, setDob] = useState("");
-  const [role, setRole] = useState<"parent" | "tutor">("parent");
+
+  function formatPhone(raw: string) {
+    const digits = raw.replace(/\D/g, "").slice(0, 10);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+
+  function formatDOB(raw: string) {
+    const digits = raw.replace(/\D/g, "").slice(0, 8);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+  }
+  const [role, setRole] = useState<"parent" | "tutor" | "student">("parent");
+
+  async function handleOAuth(provider: "google" | "facebook") {
+    try {
+      const redirectTo = Linking.createURL("/");
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo, skipBrowserRedirect: true },
+      });
+      if (error) throw error;
+      if (!data.url) throw new Error("No OAuth URL returned");
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      if (result.type === "success") {
+        const fragment = result.url.split("#")[1] ?? "";
+        const params = new URLSearchParams(fragment);
+        const accessToken  = params.get("access_token");
+        const refreshToken = params.get("refresh_token");
+        if (accessToken && refreshToken) {
+          const { data: sessionData } = await supabase.auth.setSession({
+            access_token:  accessToken,
+            refresh_token: refreshToken,
+          });
+          if (sessionData.session?.user) {
+            const { data: profile } = await supabase
+              .from("profiles").select("role").eq("id", sessionData.session.user.id).single();
+            if (profile?.role === "tutor")        router.replace("/(tutor-tabs)");
+            else if (profile?.role === "student") router.replace("/(student-tabs)");
+            else                                  router.replace("/(parent-tabs)");
+          }
+        }
+      }
+    } catch (err: any) {
+      Alert.alert("Sign up failed", err.message ?? "Something went wrong");
+    }
+  }
 
   function handleNext() {
     if (!fullName || !email) {
@@ -82,22 +136,22 @@ export default function SignUpScreen() {
           <Text style={styles.label}>Mobile Number</Text>
           <TextInput
             style={styles.input}
-            placeholder="+1 (555) 000-0000"
+            placeholder="XXX-XXX-XXXX"
             placeholderTextColor="#aab4d4"
             value={mobile}
-            onChangeText={setMobile}
-            keyboardType="phone-pad"
+            onChangeText={(t) => setMobile(formatPhone(t))}
+            keyboardType="number-pad"
           />
 
           {/* Date of Birth */}
           <Text style={styles.label}>Date of Birth</Text>
           <TextInput
             style={styles.input}
-            placeholder="DD / MM / YYYY"
+            placeholder="MM/DD/YYYY"
             placeholderTextColor="#aab4d4"
             value={dob}
-            onChangeText={setDob}
-            keyboardType="numbers-and-punctuation"
+            onChangeText={(t) => setDob(formatDOB(t))}
+            keyboardType="number-pad"
           />
 
           {/* Role selection */}
@@ -107,24 +161,25 @@ export default function SignUpScreen() {
               style={[styles.roleBtn, role === "parent" && styles.roleBtnActive]}
               onPress={() => setRole("parent")}
             >
-              <Ionicons
-                name="people-outline"
-                size={20}
-                color={role === "parent" ? "#fff" : PRIMARY}
-              />
+              <Ionicons name="people-outline" size={20} color={role === "parent" ? "#fff" : PRIMARY} />
               <Text style={[styles.roleBtnText, role === "parent" && styles.roleBtnTextActive]}>
-                Parent / Student
+                Parent
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.roleBtn, role === "student" && styles.roleBtnActive]}
+              onPress={() => setRole("student")}
+            >
+              <Ionicons name="school-outline" size={20} color={role === "student" ? "#fff" : PRIMARY} />
+              <Text style={[styles.roleBtnText, role === "student" && styles.roleBtnTextActive]}>
+                Student
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.roleBtn, role === "tutor" && styles.roleBtnActive]}
               onPress={() => setRole("tutor")}
             >
-              <Ionicons
-                name="school-outline"
-                size={20}
-                color={role === "tutor" ? "#fff" : PRIMARY}
-              />
+              <Ionicons name="briefcase-outline" size={20} color={role === "tutor" ? "#fff" : PRIMARY} />
               <Text style={[styles.roleBtnText, role === "tutor" && styles.roleBtnTextActive]}>
                 Tutor
               </Text>
@@ -152,14 +207,19 @@ export default function SignUpScreen() {
           <Text style={styles.orText}>or sign up with</Text>
 
           <View style={styles.socialRow}>
-            <TouchableOpacity style={styles.socialBtn}>
+            <TouchableOpacity
+              style={styles.socialBtn}
+              activeOpacity={0.7}
+              onPress={() => handleOAuth("google")}
+            >
               <Ionicons name="logo-google" size={22} color={PRIMARY} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.socialBtn}>
+            <TouchableOpacity
+              style={styles.socialBtn}
+              activeOpacity={0.7}
+              onPress={() => handleOAuth("facebook")}
+            >
               <Ionicons name="logo-facebook" size={22} color={PRIMARY} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.socialBtn}>
-              <Ionicons name="finger-print" size={22} color={PRIMARY} />
             </TouchableOpacity>
           </View>
 

@@ -7,8 +7,7 @@ type Profile = {
   full_name: string | null
   email: string | null
   phone: string | null
-  role: 'parent' | 'tutor'
-  avatar_url: string | null
+  role: 'parent' | 'tutor' | 'student'
 }
 
 type AuthContextType = {
@@ -40,7 +39,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select('*')
       .eq('id', userId)
       .single()
-    if (data) setProfile(data)
+    if (data) {
+      setProfile(data)
+    } else {
+      // profiles row missing — create it from auth user metadata
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const newProfile = {
+          id: userId,
+          email: user.email ?? null,
+          full_name: user.user_metadata?.full_name ?? null,
+          phone: null,
+          role: (user.user_metadata?.role ?? 'parent') as 'parent' | 'tutor' | 'student',
+        }
+        await supabase.from('profiles').upsert(newProfile)
+        setProfile(newProfile)
+      }
+    }
   }
 
   async function refreshProfile() {
@@ -62,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
       if (session?.user) fetchProfile(session.user.id)
-      else setProfile(null)
+      else { setProfile(null); setLoading(false) }
     })
 
     return () => subscription.unsubscribe()

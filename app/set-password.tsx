@@ -24,7 +24,7 @@ export default function SetPasswordScreen() {
     email: string;
     mobile: string;
     dob: string;
-    role: "parent" | "tutor";
+    role: "parent" | "tutor" | "student";
   }>();
 
   const [password, setPassword] = useState("");
@@ -72,17 +72,23 @@ export default function SetPasswordScreen() {
         full_name: params.fullName,
         email: params.email,
         phone: params.mobile || null,
-        date_of_birth: params.dob || null,
         role: params.role,
       });
 
       if (params.role === "tutor") {
-        await supabase.from("tutors").upsert({ id: data.user.id });
+        await supabase.from("tutor_profiles").upsert({
+          id: data.user.id,
+          subjects: [],
+          availability: {},
+          is_active: false, // inactive until they complete profile setup
+        });
       }
     }
 
     setLoading(false);
-    router.replace("/(tabs)");
+    if (params.role === "tutor")        router.replace("/(tutor-tabs)");
+    else if (params.role === "student") router.replace("/(student-tabs)");
+    else                                router.replace("/(parent-tabs)");
   }
 
   return (
