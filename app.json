@@ -38,6 +38,12 @@
             "backgroundColor": "#014aad"
           }
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "StudyWiser uses your photos to set your profile picture."
+        }
       ]
     ],
     "experiments": {

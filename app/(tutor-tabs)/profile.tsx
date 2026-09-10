@@ -1,13 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { SWButton, SWHeader, SWSectionHeader, getInitials } from "../../components/sw";
+import { MOCK_TUTOR_PROFILE, USE_MOCK } from "../../constants/mockData";
+import { SW } from "../../constants/theme";
 import { useAuth } from "../../context/auth";
+import { formatTime } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
+import { useAvatarUrl } from "../../lib/useAvatarUrl";
 
-const PRIMARY = "#014aad";
-const CARD_BG = "#eef2ff";
+const PRIMARY = SW.color.primary;
 
 const DAYS_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -22,22 +26,22 @@ Object.entries(TIER_SUBJECTS).forEach(([tier, subjects]) => {
   subjects.forEach((s) => { SUBJECT_TIER[s] = tier as "Basic" | "Upper" | "SAT"; });
 });
 const TIER_STYLE = {
-  Basic: { color: "#0369a1", bg: "#e0f2fe" },
-  Upper: { color: "#7c3aed", bg: "#ede9fe" },
-  SAT:   { color: "#b45309", bg: "#fef3c7" },
+  Basic: { color: SW.color.onMint,  bg: SW.color.mint },
+  Upper: { color: SW.color.primary, bg: SW.color.lavender },
+  SAT:   { color: SW.color.onCoral, bg: SW.color.coral },
 };
 
-function getInitials(name: string | null | undefined): string {
-  if (!name) return "?";
-  const parts = name.trim().split(" ");
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
+const SETTINGS_ITEMS = [
+  { icon: "person-outline",        label: "Edit Profile",   route: "/profile-edit",          tint: SW.color.lavenderSoft, fg: SW.color.primary },
+  { icon: "notifications-outline", label: "Notifications",  route: "/profile-notifications", tint: SW.color.mintSoft,     fg: SW.color.onMint },
+  { icon: "help-circle-outline",   label: "Help & Support", route: "/profile-help",          tint: SW.color.coralSoft,    fg: SW.color.onCoral },
+];
 
 export default function TutorProfileScreen() {
   const { profile, signOut } = useAuth();
   const name  = profile?.full_name ?? "Tutor";
   const email = profile?.email     ?? "";
+  const avatarUrl = useAvatarUrl(profile?.avatar_url);
 
   const [subjects, setSubjects]     = useState<string[]>([]);
   const [availability, setAvail]    = useState<Record<string, { start: string; end: string }>>({});
@@ -51,6 +55,13 @@ export default function TutorProfileScreen() {
   );
 
   async function loadData() {
+    if (USE_MOCK) {
+      setSubjects(MOCK_TUTOR_PROFILE.subjects);
+      setAvail(MOCK_TUTOR_PROFILE.availability);
+      setStats(MOCK_TUTOR_PROFILE.stats);
+      setLoading(false);
+      return;
+    }
     const userId = profile?.id ?? (await supabase.auth.getUser()).data.user?.id;
     if (!userId) return;
     setLoading(true);
@@ -101,69 +112,56 @@ export default function TutorProfileScreen() {
   const availabilityRows = DAYS_ORDER.map((day) => {
     const slot = availability[day];
     return slot
-      ? { day, times: `${slot.start} – ${slot.end}`, active: true }
+      ? { day, times: `${formatTime(slot.start)} – ${formatTime(slot.end)}`, active: true }
       : { day, times: "Unavailable", active: false };
   });
 
-  const STATS_DISPLAY = [
-    { value: String(stats.sessions), label: "Sessions", color: PRIMARY    },
-    { value: String(stats.students), label: "Students", color: "#7c3aed"  },
-    { value: "—",                    label: "Rating",   color: "#f59e0b"  },
-  ];
-
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["left", "right"]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        <SWHeader initials={getInitials(name)} />
 
-        {/* Hero */}
-        <View style={styles.hero}>
-          <TouchableOpacity
-            style={styles.settingsGear}
-            onPress={() => router.push("/profile-settings" as any)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="settings-outline" size={20} color={PRIMARY} />
-          </TouchableOpacity>
-
-          <View style={styles.avatarRing}>
+        {/* Identity */}
+        <View style={styles.identity}>
+          <View style={styles.avatarWrap}>
             <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>{getInitials(name)}</Text>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarText}>{getInitials(name)}</Text>
+              )}
             </View>
+            <TouchableOpacity
+              style={styles.avatarEdit}
+              onPress={() => router.push("/profile-edit" as any)}
+            >
+              <Ionicons name="pencil" size={14} color="#fff" />
+            </TouchableOpacity>
           </View>
-
           <Text style={styles.heroName}>{name}</Text>
-          <Text style={styles.heroEmail}>{email}</Text>
-
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleBadgeText}>Tutor</Text>
-          </View>
-
-          <View style={styles.statsRow}>
-            {STATS_DISPLAY.map((s, i) => (
-              <View key={s.label} style={styles.statItem}>
-                {i > 0 && <View style={styles.statDivider} />}
-                <View style={styles.statContent}>
-                  <Text style={[styles.statValue, { color: s.color }]}>{s.value}</Text>
-                  <Text style={styles.statLabel}>{s.label}</Text>
-                </View>
-              </View>
-            ))}
+          {email ? <Text style={styles.heroEmail}>{email}</Text> : null}
+          <View style={styles.statsBadge}>
+            <Ionicons name="star" size={14} color={SW.color.onMint} />
+            <Text style={styles.statsBadgeText}>
+              {stats.sessions} Session{stats.sessions !== 1 ? "s" : ""} · {stats.students} Student{stats.students !== 1 ? "s" : ""}
+            </Text>
           </View>
         </View>
 
         {/* My Subjects */}
         <View style={styles.section}>
-          <View style={styles.sectionRow}>
-            <Text style={styles.sectionTitle}>My Subjects</Text>
-            <TouchableOpacity onPress={() => router.push("/edit-subjects" as any)} activeOpacity={0.7}>
-              <Text style={styles.editLink}>Edit</Text>
-            </TouchableOpacity>
-          </View>
+          <SWSectionHeader
+            title="My Subjects"
+            actionLabel="Edit"
+            onAction={() => router.push("/edit-subjects" as any)}
+          />
 
           {subjects.length === 0 ? (
             <View style={styles.emptyBox}>
-              <Ionicons name="add-circle-outline" size={22} color="#cbd5e1" />
-              <Text style={styles.emptyBoxText}>No subjects yet — tap <Text style={{ color: PRIMARY, fontWeight: "600" }}>Edit</Text> to add some</Text>
+              <Ionicons name="add-circle-outline" size={22} color={SW.color.muted} />
+              <Text style={styles.emptyBoxText}>
+                No subjects yet — tap <Text style={{ color: PRIMARY, fontFamily: SW.font.bold }}>Edit</Text> to add some
+              </Text>
             </View>
           ) : (
             <View style={styles.chipRow}>
@@ -176,26 +174,35 @@ export default function TutorProfileScreen() {
                   </View>
                 );
               })}
+              <TouchableOpacity
+                style={styles.addChip}
+                onPress={() => router.push("/edit-subjects" as any)}
+              >
+                <Ionicons name="add" size={18} color={SW.color.muted} />
+              </TouchableOpacity>
             </View>
           )}
         </View>
 
-        {/* My Availability */}
+        {/* Availability */}
         <View style={styles.section}>
-          <View style={styles.sectionRow}>
-            <Text style={styles.sectionTitle}>My Availability</Text>
-            <TouchableOpacity onPress={() => router.push("/edit-availability" as any)} activeOpacity={0.7}>
-              <Text style={styles.editLink}>Edit</Text>
-            </TouchableOpacity>
-          </View>
+          <SWSectionHeader
+            title="Availability"
+            actionLabel="Edit Hours"
+            onAction={() => router.push("/edit-availability" as any)}
+          />
 
-          <View style={styles.availList}>
+          <View style={styles.availCard}>
             {availabilityRows.map((row, i) => (
               <View key={row.day}>
                 <View style={styles.availRow}>
-                  <Text style={[styles.availDay, !row.active && styles.mutedText]}>{row.day}</Text>
-                  <Text style={[styles.availTimes, !row.active && styles.mutedText]}>{row.times}</Text>
-                  <View style={[styles.availDot, { backgroundColor: row.active ? "#10b981" : "#e2e8f0" }]} />
+                  <View>
+                    <Text style={[styles.availDay, !row.active && styles.mutedText]}>{row.day}</Text>
+                    <Text style={[styles.availTimes, !row.active && styles.mutedText]}>{row.times}</Text>
+                  </View>
+                  <View style={[styles.availPill, { backgroundColor: row.active ? SW.color.success : SW.color.surfaceContainer }]}>
+                    <View style={[styles.availKnob, row.active ? { alignSelf: "flex-end" } : { alignSelf: "flex-start" }]} />
+                  </View>
                 </View>
                 {i < availabilityRows.length - 1 && <View style={styles.divider} />}
               </View>
@@ -205,24 +212,19 @@ export default function TutorProfileScreen() {
 
         {/* Settings */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { marginBottom: 14 }]}>Settings</Text>
-          <View style={styles.settingsList}>
-            {[
-              { icon: "person-outline",        label: "Edit Profile",   route: "/profile-edit"          },
-              { icon: "notifications-outline", label: "Notifications",  route: "/profile-notifications" },
-              { icon: "help-circle-outline",   label: "Help & Support", route: "/profile-help"          },
-            ].map((item, i, arr) => (
+          <View style={styles.settingsCard}>
+            {SETTINGS_ITEMS.map((item, i, arr) => (
               <View key={item.label}>
                 <TouchableOpacity
                   style={styles.settingsRow}
                   onPress={() => router.push(item.route as any)}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.settingsIconWrap}>
-                    <Ionicons name={item.icon as any} size={20} color={PRIMARY} />
+                  <View style={[styles.settingsIconWrap, { backgroundColor: item.tint }]}>
+                    <Ionicons name={item.icon as any} size={19} color={item.fg} />
                   </View>
                   <Text style={styles.settingsLabel}>{item.label}</Text>
-                  <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
+                  <Ionicons name="chevron-forward" size={18} color={SW.color.outline} />
                 </TouchableOpacity>
                 {i < arr.length - 1 && <View style={styles.divider} />}
               </View>
@@ -231,10 +233,13 @@ export default function TutorProfileScreen() {
         </View>
 
         {/* Sign out */}
-        <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut} activeOpacity={0.85}>
-          <Ionicons name="log-out-outline" size={20} color="#ef4444" />
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
+        <SWButton
+          label="Sign Out"
+          icon="log-out-outline"
+          variant="danger"
+          onPress={handleSignOut}
+          style={{ marginHorizontal: SW.space.margin }}
+        />
 
       </ScrollView>
     </SafeAreaView>
@@ -242,82 +247,78 @@ export default function TutorProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#fff" },
-  scroll: { paddingBottom: 110 },
+  safe: { flex: 1, backgroundColor: SW.color.surface },
+  scroll: { paddingBottom: 130 },
 
-  hero: {
-    alignItems: "center", backgroundColor: CARD_BG,
-    marginHorizontal: 20, marginTop: 18, marginBottom: 28,
-    borderRadius: 28, paddingTop: 24, paddingBottom: 20, paddingHorizontal: 20, gap: 6,
-  },
-  settingsGear: {
-    position: "absolute", top: 16, right: 16,
-    width: 36, height: 36, borderRadius: 12,
-    backgroundColor: "#fff", alignItems: "center", justifyContent: "center",
-  },
-  avatarRing: {
-    width: 92, height: 92, borderRadius: 46, backgroundColor: "#fff",
-    alignItems: "center", justifyContent: "center", marginBottom: 6,
-    shadowColor: PRIMARY, shadowOpacity: 0.15, shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 }, elevation: 4,
-  },
+  identity: { alignItems: "center", marginBottom: 28, gap: 4 },
+  avatarWrap: { marginBottom: 10 },
   avatarCircle: {
-    width: 80, height: 80, borderRadius: 40,
+    width: 108, height: 108, borderRadius: 54,
+    backgroundColor: SW.color.mint,
+    borderWidth: 4, borderColor: SW.color.card,
+    alignItems: "center", justifyContent: "center",
+    ...SW.shadow(SW.color.mint, 0.5),
+  },
+  avatarText: { fontFamily: SW.font.bold, fontSize: 36, color: SW.color.onMint },
+  avatarImage: { width: "100%", height: "100%", borderRadius: 54 },
+  avatarEdit: {
+    position: "absolute", right: 0, bottom: 2,
+    width: 32, height: 32, borderRadius: 16,
     backgroundColor: PRIMARY, alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: SW.color.card,
   },
-  avatarText: { color: "#fff", fontSize: 28, fontWeight: "700" },
-  heroName:  { fontSize: 20, fontWeight: "800", color: "#0f172a" },
-  heroEmail: { fontSize: 13, color: "#64748b" },
-  roleBadge: { backgroundColor: PRIMARY, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 4 },
-  roleBadgeText: { color: "#fff", fontSize: 12, fontWeight: "700" },
-
-  statsRow: {
-    flexDirection: "row", backgroundColor: "#fff",
-    borderRadius: 18, marginTop: 10, width: "100%", paddingVertical: 14,
+  heroName:  { ...SW.type.headlineLg, fontSize: 26, color: SW.color.onSurface },
+  heroEmail: { ...SW.type.bodyMd, fontSize: 13, color: SW.color.muted },
+  statsBadge: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    marginTop: 8, backgroundColor: SW.color.mint,
+    borderRadius: SW.radius.full, paddingHorizontal: 16, paddingVertical: 8,
   },
-  statItem: { flex: 1, flexDirection: "row", alignItems: "center" },
-  statDivider: { width: 1, height: 32, backgroundColor: "#e2e8f0" },
-  statContent: { flex: 1, alignItems: "center", gap: 2 },
-  statValue: { fontSize: 20, fontWeight: "800" },
-  statLabel: { fontSize: 11, color: "#94a3b8", fontWeight: "500" },
+  statsBadgeText: { ...SW.type.labelMd, color: SW.color.onMint },
 
-  section: { paddingHorizontal: 20, marginBottom: 28 },
-  sectionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  sectionTitle: { fontSize: 17, fontWeight: "800", color: "#0f172a" },
-  editLink: { fontSize: 13, color: PRIMARY, fontWeight: "600" },
-  emptyText: { color: "#94a3b8", fontSize: 13 },
+  section: { paddingHorizontal: SW.space.margin, marginBottom: 28 },
+
   emptyBox: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "#f8fafc", borderRadius: 14,
+    backgroundColor: SW.color.surfaceLow, borderRadius: SW.radius.md,
     paddingVertical: 14, paddingHorizontal: 16,
-    borderWidth: 1, borderColor: "#e2e8f0",
   },
-  emptyBoxText: { color: "#94a3b8", fontSize: 13, flex: 1 },
+  emptyBoxText: { ...SW.type.bodyMd, fontSize: 13, color: SW.color.muted, flex: 1 },
 
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  subjectChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
-  subjectChipText: { fontSize: 13, fontWeight: "600" },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, alignItems: "center" },
+  subjectChip: { paddingHorizontal: 18, paddingVertical: 11, borderRadius: SW.radius.full },
+  subjectChipText: { ...SW.type.labelMd, fontSize: 14 },
+  addChip: {
+    width: 42, height: 42, borderRadius: 21,
+    borderWidth: 2, borderStyle: "dashed", borderColor: SW.color.outline,
+    alignItems: "center", justifyContent: "center",
+  },
 
-  availList: { borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 18, overflow: "hidden" },
-  availRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 13 },
-  availDay: { width: 38, fontSize: 13, fontWeight: "700", color: "#0f172a" },
-  availTimes: { flex: 1, fontSize: 13, color: "#475569" },
-  mutedText: { color: "#cbd5e1" },
-  availDot: { width: 8, height: 8, borderRadius: 4 },
-  divider: { height: 1, backgroundColor: "#f1f5f9", marginHorizontal: 16 },
+  availCard: {
+    backgroundColor: SW.color.card, borderRadius: SW.radius.lg,
+    paddingHorizontal: 18, overflow: "hidden",
+    ...SW.shadow(SW.color.outline, 0.22),
+  },
+  availRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingVertical: 14,
+  },
+  availDay: { ...SW.type.bodyLg, fontFamily: SW.font.bold, fontSize: 16, color: SW.color.onSurface },
+  availTimes: { ...SW.type.bodyMd, fontSize: 13, color: SW.color.onSurfaceVariant, marginTop: 2 },
+  mutedText: { color: SW.color.muted },
+  availPill: { width: 46, height: 26, borderRadius: 13, padding: 3, justifyContent: "center" },
+  availKnob: { width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff" },
+  divider: { height: 1, backgroundColor: SW.color.surfaceLow },
 
-  settingsList: { borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 18, overflow: "hidden" },
-  settingsRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, gap: 14 },
+  settingsCard: {
+    backgroundColor: SW.color.card, borderRadius: SW.radius.lg,
+    paddingHorizontal: 18, overflow: "hidden",
+    ...SW.shadow(SW.color.outline, 0.22),
+  },
+  settingsRow: { flexDirection: "row", alignItems: "center", paddingVertical: 16, gap: 14 },
   settingsIconWrap: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: CARD_BG, alignItems: "center", justifyContent: "center",
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: "center", justifyContent: "center",
   },
-  settingsLabel: { flex: 1, fontSize: 14, fontWeight: "500", color: "#1e293b" },
-
-  signOutBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 8, marginHorizontal: 20, borderWidth: 1.5, borderColor: "#fecaca",
-    borderRadius: 30, paddingVertical: 14, backgroundColor: "#fff1f1",
-  },
-  signOutText: { color: "#ef4444", fontSize: 15, fontWeight: "700" },
+  settingsLabel: { flex: 1, ...SW.type.bodyMd, fontSize: 15, fontFamily: SW.font.semibold, color: SW.color.onSurface },
 });

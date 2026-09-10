@@ -12,13 +12,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { toISODate } from "../lib/dob";
 import { supabase } from "../lib/supabase";
 
 const PRIMARY = "#014aad";
 const INPUT_BG = "#eef2ff";
 
 export default function SetPasswordScreen() {
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     fullName: string;
     email: string;
@@ -72,6 +74,7 @@ export default function SetPasswordScreen() {
         full_name: params.fullName,
         email: params.email,
         phone: params.mobile || null,
+        dob: toISODate(params.dob),
         role: params.role,
       });
 
@@ -86,19 +89,20 @@ export default function SetPasswordScreen() {
     }
 
     setLoading(false);
-    if (params.role === "tutor")        router.replace("/(tutor-tabs)");
-    else if (params.role === "student") router.replace("/(student-tabs)");
+    // New tutors must finalize credentials before reaching their dashboard
+    if (params.role === "tutor")        router.replace("/onboarding-documents");
+    else if (params.role === "student") router.replace("/link-student-code");
     else                                router.replace("/(parent-tabs)");
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={24} color={PRIMARY} />
           </TouchableOpacity>

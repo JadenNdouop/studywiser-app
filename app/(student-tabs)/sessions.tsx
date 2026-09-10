@@ -3,12 +3,13 @@ import { useCallback, useState } from "react";
 import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
+import { SWEmptyState, SWHeader, SWStatusBadge, getInitials, subjectTint } from "../../components/sw";
+import { SW } from "../../constants/theme";
 import { useAuth } from "../../context/auth";
 import { formatFrequency, formatTime } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
 
-const PRIMARY = "#014aad";
-const CARD_BG = "#eef2ff";
+const PRIMARY = SW.color.primary;
 
 type Status = "upcoming" | "pending" | "completed" | "cancelled";
 
@@ -25,32 +26,6 @@ type SessionRow = {
   meeting_url: string | null;
 };
 
-const SUBJECT_TIER: Record<string, "Basic" | "Upper" | "SAT"> = {};
-const TIER_SUBJECTS = {
-  Basic: ["Reading & Writing", "Math", "Science", "Social Studies", "Spelling"],
-  Upper: ["Algebra I / II", "Geometry", "Pre-Calculus / Calculus", "Biology", "Chemistry", "Physics", "English / Literature", "US History / World History"],
-  SAT:   ["SAT Math", "SAT Reading & Writing", "ACT", "PSAT"],
-};
-Object.entries(TIER_SUBJECTS).forEach(([tier, subjects]) => {
-  subjects.forEach((s) => { SUBJECT_TIER[s] = tier as "Basic" | "Upper" | "SAT"; });
-});
-const TIER_COLOR: Record<string, { color: string; bg: string }> = {
-  Basic: { color: "#0369a1", bg: "#e0f2fe" },
-  Upper: { color: "#7c3aed", bg: "#ede9fe" },
-  SAT:   { color: "#b45309", bg: "#fef3c7" },
-};
-
-const AVATAR_COLORS = ["#c7d2fe","#fde8d8","#d1fae5","#fef9c3","#fee2e2","#ddd6fe"];
-function avatarColor(id: string) {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
-function getInitials(name: string): string {
-  const parts = name.trim().split(" ");
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
 function formatDateLabel(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -110,17 +85,13 @@ export default function StudentSessionsScreen() {
     return s.status === activeFilter.toLowerCase();
   });
 
-  const completedCount = sessions.filter((s) => s.status === "completed").length;
-
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Sessions</Text>
-        {completedCount > 0 && (
-          <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>{completedCount} completed</Text>
-          </View>
-        )}
+    <SafeAreaView style={styles.safe} edges={["left", "right"]}>
+      <SWHeader initials={getInitials(profile?.full_name)} />
+
+      <View style={styles.headingWrap}>
+        <Text style={styles.heading}>My Sessions</Text>
+        <Text style={styles.subheading}>Manage your learning journey and upcoming meetings.</Text>
       </View>
 
       <View style={styles.tabBar}>
@@ -138,76 +109,63 @@ export default function StudentSessionsScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {filtered.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="calendar-outline" size={52} color="#cbd5e1" />
-            <Text style={styles.emptyTitle}>No sessions here</Text>
-            <Text style={styles.emptyBody}>
-              {activeFilter === "All"
+          <SWEmptyState
+            icon="calendar-outline"
+            title="No sessions here"
+            subtitle={
+              activeFilter === "All"
                 ? "You don't have any sessions yet."
-                : `No ${activeFilter.toLowerCase()} sessions to show.`}
-            </Text>
-          </View>
+                : `No ${activeFilter.toLowerCase()} sessions to show.`
+            }
+            style={{ marginTop: 40 }}
+          />
         ) : (
           filtered.map((s) => {
-            const tier = SUBJECT_TIER[s.subject] ?? "Basic";
-            const tc   = TIER_COLOR[tier];
+            const subj = subjectTint(s.subject);
             const isPending = s.status === "pending";
+            const isCompleted = s.status === "completed";
 
             return (
-              <View key={s.id} style={styles.card}>
+              <View key={s.id} style={[styles.card, SW.shadow(subj.fg, 0.14)]}>
                 <View style={styles.cardTop}>
-                  <View style={styles.timeChip}>
-                    <Ionicons name="time-outline" size={12} color={PRIMARY} />
-                    <Text style={styles.timeChipText}>
-                      {formatDateLabel(s.session_date)} · {formatTime(s.session_time)} · {s.duration} min
-                    </Text>
+                  <View style={[styles.subjectIcon, { backgroundColor: subj.bg }]}>
+                    <Ionicons name={subj.icon as any} size={22} color={subj.fg} />
                   </View>
-                  <View style={[styles.tierBadge, { backgroundColor: tc.bg }]}>
-                    <Text style={[styles.tierBadgeText, { color: tc.color }]}>{tier}</Text>
-                  </View>
+                  <SWStatusBadge status={s.status} />
                 </View>
 
-                <View style={styles.cardBody}>
-                  <View style={[styles.avatar, { backgroundColor: avatarColor(s.id) }]}>
-                    <Text style={styles.avatarText}>
-                      {isPending ? "?" : getInitials(s.tutor_name)}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.subject}>{s.subject}</Text>
-                    <View style={styles.metaRow}>
-                      <View style={[styles.formatDot, { backgroundColor: s.format === "Virtual" ? "#3b82f6" : "#10b981" }]} />
-                      <Text style={styles.metaText}>{s.format}</Text>
-                      {s.frequency !== "One-time" && (
-                        <>
-                          <Text style={styles.metaDot}>·</Text>
-                          <Text style={styles.metaText}>{formatFrequency(s.frequency)}</Text>
-                        </>
-                      )}
-                      <Text style={styles.metaDot}>·</Text>
-                      <Text style={styles.metaText}>{s.tutor_name}</Text>
-                    </View>
-                  </View>
-                  {s.status === "completed" && (
-                    <View style={styles.completedBadge}>
-                      <Ionicons name="checkmark-circle" size={20} color="#10b981" />
-                    </View>
-                  )}
+                <Text style={styles.subject}>{s.subject}</Text>
+
+                <View style={styles.metaRow}>
+                  <Ionicons name="calendar-outline" size={14} color={SW.color.onSurfaceVariant} />
+                  <Text style={styles.metaText}>
+                    {formatDateLabel(s.session_date)} · {formatTime(s.session_time)} ({s.duration} min)
+                  </Text>
+                </View>
+                <View style={styles.metaRow}>
+                  <Ionicons name="person-outline" size={14} color={SW.color.onSurfaceVariant} />
+                  <Text style={styles.metaText}>
+                    {isPending ? "Match Pending" : s.tutor_name}
+                    {" · "}{s.format}
+                    {s.frequency !== "One-time" ? ` · ${formatFrequency(s.frequency)}` : ""}
+                  </Text>
                 </View>
 
                 {s.status === "upcoming" && s.format === "Virtual" && s.meeting_url && (
-                  <>
-                    <View style={styles.cardDivider} />
-                    <View style={styles.cardActions}>
-                      <TouchableOpacity
-                        style={styles.joinBtn}
-                        onPress={() => Linking.openURL(s.meeting_url!)}
-                      >
-                        <Ionicons name="videocam-outline" size={15} color="#fff" />
-                        <Text style={styles.joinBtnText}>Join</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </>
+                  <TouchableOpacity
+                    style={styles.joinBtn}
+                    onPress={() => Linking.openURL(s.meeting_url!)}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="videocam-outline" size={16} color="#fff" />
+                    <Text style={styles.joinBtnText}>Join Session</Text>
+                  </TouchableOpacity>
+                )}
+                {isCompleted && (
+                  <View style={styles.completedRow}>
+                    <Ionicons name="checkmark-circle" size={18} color={SW.color.onMint} />
+                    <Text style={styles.completedText}>Session completed</Text>
+                  </View>
                 )}
               </View>
             );
@@ -219,60 +177,47 @@ export default function StudentSessionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#fff" },
+  safe: { flex: 1, backgroundColor: SW.color.surface },
 
-  header: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 20, paddingTop: 10, paddingBottom: 16,
-  },
-  headerTitle: { fontSize: 22, fontWeight: "800", color: "#0f172a" },
-  headerBadge: { backgroundColor: "#ecfdf5", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5 },
-  headerBadgeText: { fontSize: 12, fontWeight: "700", color: "#10b981" },
+  headingWrap: { paddingHorizontal: SW.space.margin, marginBottom: 16 },
+  heading: { ...SW.type.headlineLg, color: SW.color.onSurface },
+  subheading: { ...SW.type.bodyMd, color: SW.color.muted, marginTop: 4 },
 
   tabBar: {
-    flexDirection: "row", marginHorizontal: 20, marginBottom: 12,
-    backgroundColor: CARD_BG, borderRadius: 16, padding: 4, gap: 4,
+    flexDirection: "row", marginHorizontal: SW.space.margin, marginBottom: 16,
+    backgroundColor: SW.color.surfaceContainer, borderRadius: SW.radius.full, padding: 4, gap: 4,
   },
-  tab: { flex: 1, paddingVertical: 9, borderRadius: 12, alignItems: "center" },
+  tab: { flex: 1, paddingVertical: 10, borderRadius: SW.radius.full, alignItems: "center" },
   tabActive: { backgroundColor: PRIMARY },
-  tabText: { fontSize: 13, fontWeight: "600", color: "#64748b" },
+  tabText: { ...SW.type.labelMd, color: SW.color.onSurfaceVariant },
   tabTextActive: { color: "#fff" },
 
-  scroll: { paddingHorizontal: 20, paddingBottom: 110, gap: 12 },
+  scroll: { paddingHorizontal: SW.space.margin, paddingBottom: 130, gap: 16 },
 
-  card: { borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 18, overflow: "hidden" },
+  card: {
+    backgroundColor: SW.color.card,
+    borderRadius: SW.radius.lg,
+    padding: SW.space.cardPad,
+  },
   cardTop: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8,
-    borderBottomWidth: 1, borderBottomColor: "#f1f5f9",
+    marginBottom: 12,
   },
-  timeChip: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    backgroundColor: CARD_BG, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
+  subjectIcon: {
+    width: 46, height: 46, borderRadius: 23,
+    alignItems: "center", justifyContent: "center",
   },
-  timeChipText: { color: PRIMARY, fontSize: 11, fontWeight: "600" },
-  tierBadge: { borderRadius: 10, paddingHorizontal: 9, paddingVertical: 4 },
-  tierBadgeText: { fontSize: 10, fontWeight: "700" },
+  subject: { ...SW.type.headlineMd, color: SW.color.onSurface, marginBottom: 10 },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 6 },
+  metaText: { ...SW.type.bodyMd, fontSize: 14, color: SW.color.onSurfaceVariant, flexShrink: 1 },
 
-  cardBody: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 14, paddingVertical: 14, gap: 12,
+  joinBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: PRIMARY, borderRadius: SW.radius.full,
+    paddingVertical: 13, marginTop: 10,
+    ...SW.shadow(PRIMARY, 0.25),
   },
-  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: PRIMARY, fontSize: 15, fontWeight: "700" },
-  subject: { fontSize: 14, fontWeight: "700", color: "#0f172a", marginBottom: 4 },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  formatDot: { width: 5, height: 5, borderRadius: 3 },
-  metaText: { fontSize: 11, color: "#94a3b8" },
-  metaDot: { fontSize: 11, color: "#cbd5e1" },
-  completedBadge: { padding: 4 },
-
-  cardDivider: { height: 1, backgroundColor: "#f1f5f9" },
-  cardActions: { flexDirection: "row", paddingHorizontal: 14, paddingVertical: 10, justifyContent: "flex-end" },
-  joinBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: PRIMARY },
-  joinBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
-
-  emptyContainer: { alignItems: "center", paddingTop: 80, gap: 12 },
-  emptyTitle: { color: "#64748b", fontSize: 18, fontWeight: "700" },
-  emptyBody: { color: "#94a3b8", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  joinBtnText: { fontFamily: SW.font.bold, fontSize: 15, color: "#fff" },
+  completedRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
+  completedText: { ...SW.type.labelMd, fontSize: 13, color: SW.color.onMint },
 });

@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/auth";
 import { supabase } from "../lib/supabase";
 
@@ -66,6 +66,7 @@ function formatDateLabel(dateStr: string): string {
 }
 
 export default function AllSessionsScreen() {
+  const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const params = useLocalSearchParams<{ filter?: string }>();
   const initial = (params.filter as Status | "all") ?? "all";
@@ -116,9 +117,9 @@ export default function AllSessionsScreen() {
   const totalEarnings = filtered.reduce((sum, s) => sum + (s.price ?? 0), 0);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color={PRIMARY} />
         </TouchableOpacity>

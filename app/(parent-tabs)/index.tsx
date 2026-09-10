@@ -1,37 +1,29 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SWButton,
+  SWCard,
+  SWEmptyState,
+  SWHeader,
+  SWSectionHeader,
+  avatarTint,
+  getInitials,
+  subjectTint,
+} from "../../components/sw";
+import { MOCK_PARENT_SESSIONS, MOCK_STUDENTS, USE_MOCK } from "../../constants/mockData";
+import { SW } from "../../constants/theme";
 import { useAuth } from "../../context/auth";
 import { formatTime } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
-
-const PRIMARY = "#014aad";
-const CARD_BG = "#eef2ff";
 
 function getGreeting() {
   const h = new Date().getHours();
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
-}
-
-function getTodayDate() {
-  return new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-}
-
-function getInitials(name: string): string {
-  const parts = name.trim().split(" ");
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-const AVATAR_COLORS = ["#c7d2fe","#fde8d8","#d1fae5","#fef9c3","#fee2e2","#ddd6fe"];
-function avatarColor(id: string) {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
 function formatSessionDate(dateStr: string): string {
@@ -97,6 +89,23 @@ export default function ParentHomeScreen() {
   );
 
   async function loadData() {
+    if (USE_MOCK) {
+      const today = new Date().toISOString().split("T")[0];
+      const { start: weekStart, end: weekEnd } = currentWeekRange();
+      setUpcomingSessions(
+        MOCK_PARENT_SESSIONS
+          .filter((s) => s.status === "upcoming" && s.session_date >= today)
+          .map((s) => ({ id: s.id, student_name: s.student_name, subject: s.subject, tutor_name: s.tutor_name, session_date: s.session_date, session_time: s.session_time, duration: s.duration, format: s.format }))
+          .slice(0, 4)
+      );
+      setBillRows(
+        MOCK_PARENT_SESSIONS
+          .filter((s) => s.status === "completed" && s.session_date >= weekStart && s.session_date <= weekEnd)
+          .map((s) => ({ id: s.id, student_name: s.student_name, subject: s.subject, session_date: s.session_date, price: s.price }))
+      );
+      setStudents(MOCK_STUDENTS);
+      return;
+    }
     const userId = profile?.id ?? (await supabase.auth.getUser()).data.user?.id;
     if (!userId) return;
     const today  = new Date().toISOString().split("T")[0];
@@ -167,250 +176,211 @@ export default function ParentHomeScreen() {
   }
 
   const weekTotal = billRows.reduce((sum, s) => sum + s.price, 0);
+  const [dollars, cents] = weekTotal.toFixed(2).split(".");
   const { start: weekStart, end: weekEnd } = currentWeekRange();
   const weekLabel = `${new Date(weekStart + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(weekEnd + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["left", "right"]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        <SWHeader initials={getInitials(profile?.full_name)} />
 
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>{getGreeting()}, {firstName} 👋</Text>
-            <Text style={styles.dateText}>{getTodayDate()}</Text>
-          </View>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => router.push("/notifications")}>
-            <Ionicons name="notifications-outline" size={20} color={PRIMARY} />
-          </TouchableOpacity>
+        {/* Page heading */}
+        <View style={styles.headingWrap}>
+          <Text style={styles.heading}>Parent Dashboard</Text>
+          <Text style={styles.subheading}>{getGreeting()}, {firstName} — checking in on your little achievers today?</Text>
         </View>
 
-        {/* Request CTA */}
-        <TouchableOpacity
-          style={styles.requestBtn}
-          onPress={() => router.push("/(parent-tabs)/find")}
-          activeOpacity={0.85}
-        >
-          <View style={styles.requestBtnInner}>
-            <Ionicons name="add-circle-outline" size={22} color="#fff" />
-            <Text style={styles.requestBtnText}>Request a Tutor</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
-        </TouchableOpacity>
+        {/* Hero: request a tutor */}
+        <View style={styles.hero}>
+          <View style={styles.heroCircle} />
+          <Text style={styles.heroTitle}>Need a helping hand with Homework?</Text>
+          <Text style={styles.heroBody}>
+            Match with the perfect tutor in minutes. Let&apos;s make learning feel like play!
+          </Text>
+          <SWButton
+            label="Request a Tutor"
+            variant="mint"
+            onPress={() => router.push("/(parent-tabs)/find")}
+            style={{ alignSelf: "flex-start", paddingVertical: 12 }}
+            textStyle={{ fontSize: 15 }}
+          />
+        </View>
+
+        {/* My Students */}
+        <View style={styles.section}>
+          <SWSectionHeader
+            title="My Students"
+            actionLabel="View All"
+            onAction={() => router.push("/(parent-tabs)/profile")}
+          />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.studentScroll}
+            contentContainerStyle={styles.studentRow}
+          >
+            {students.map((st) => {
+              const tint = avatarTint(st.id);
+              return (
+                <View key={st.id} style={styles.studentItem}>
+                  <View style={[styles.studentAvatar, { backgroundColor: tint.bg }]}>
+                    <Text style={[styles.studentAvatarText, { color: tint.fg }]}>{getInitials(st.full_name)}</Text>
+                  </View>
+                  <Text style={styles.studentName}>{st.full_name.split(" ")[0]}</Text>
+                  <View style={[styles.gradeChip, { backgroundColor: tint.bg }]}>
+                    <Text style={[styles.gradeChipText, { color: tint.fg }]}>{st.grade_level ?? "—"}</Text>
+                  </View>
+                </View>
+              );
+            })}
+            <TouchableOpacity
+              style={styles.studentItem}
+              onPress={() => router.push("/(parent-tabs)/profile")}
+            >
+              <View style={styles.addAvatar}>
+                <Ionicons name="add" size={26} color={SW.color.muted} />
+              </View>
+              <Text style={[styles.studentName, { color: SW.color.muted }]}>Add Student</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
 
         {/* Upcoming Sessions */}
         <View style={styles.section}>
-          <View style={styles.sectionRow}>
-            <Text style={styles.sectionTitle}>Upcoming Sessions</Text>
-            <TouchableOpacity onPress={() => router.push("/(parent-tabs)/sessions")}>
-              <Text style={styles.seeAll}>See all</Text>
-            </TouchableOpacity>
-          </View>
-
+          <SWSectionHeader
+            title="Upcoming Sessions"
+            actionLabel="See all"
+            onAction={() => router.push("/(parent-tabs)/sessions")}
+          />
           {upcomingSessions.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Ionicons name="calendar-outline" size={20} color="#cbd5e1" />
-              <Text style={styles.emptyBoxText}>No upcoming sessions — <Text style={{ color: PRIMARY, fontWeight: "600" }}>Request a tutor</Text> to get started</Text>
-            </View>
+            <SWEmptyState
+              icon="calendar-outline"
+              title="No upcoming sessions"
+              subtitle="Request a tutor to get started"
+            />
           ) : (
-            <View style={styles.sessionList}>
-              {upcomingSessions.map((s, i) => (
-                <View key={s.id}>
-                  <View style={styles.sessionRow}>
-                    <View style={[styles.sessionAvatar, { backgroundColor: avatarColor(s.id) }]}>
-                      <Text style={styles.sessionAvatarText}>{getInitials(s.student_name)}</Text>
+            <View style={{ gap: SW.space.stack }}>
+              {upcomingSessions.map((s) => {
+                const tint = subjectTint(s.subject);
+                return (
+                  <SWCard key={s.id} tint={tint.fg} style={styles.sessionCard}>
+                    <View style={[styles.subjectIcon, { backgroundColor: tint.bg }]}>
+                      <Ionicons name={tint.icon as any} size={22} color={tint.fg} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.sessionName}>{s.student_name}</Text>
-                      <Text style={styles.sessionSubject}>{s.subject} · {s.tutor_name}</Text>
-                      <View style={styles.sessionMeta}>
-                        <Ionicons name="time-outline" size={12} color="#94a3b8" />
-                        <Text style={styles.sessionMetaText}>
-                          {formatSessionDate(s.session_date)} · {formatTime(s.session_time)} · {s.duration} min
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={[styles.formatBadge, { backgroundColor: s.format === "Virtual" ? "#dbeafe" : "#dcfce7" }]}>
-                      <Text style={[styles.formatText, { color: s.format === "Virtual" ? "#1d4ed8" : "#166534" }]}>
-                        {s.format}
+                      <Text style={styles.sessionTitle}>{s.subject}</Text>
+                      <Text style={styles.sessionMeta}>
+                        {s.student_name.split(" ")[0]} • {formatSessionDate(s.session_date)} at {formatTime(s.session_time)}
                       </Text>
+                      <Text style={styles.sessionSub}>{s.tutor_name} · {s.format} · {s.duration} min</Text>
                     </View>
-                  </View>
-                  {i < upcomingSessions.length - 1 && <View style={styles.divider} />}
-                </View>
-              ))}
+                  </SWCard>
+                );
+              })}
             </View>
           )}
         </View>
 
         {/* This Week's Bill */}
         <View style={styles.section}>
-          <View style={styles.sectionRow}>
-            <Text style={styles.sectionTitle}>This Week's Bill</Text>
-            <TouchableOpacity onPress={() => router.push("/parent-payment" as any)}>
-              <Text style={styles.seeAll}>View portal</Text>
-            </TouchableOpacity>
-          </View>
-
           {billRows.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Ionicons name="receipt-outline" size={20} color="#cbd5e1" />
-              <Text style={styles.emptyBoxText}>No completed sessions this week yet</Text>
-            </View>
+            <>
+              <SWSectionHeader title="This Week's Bill" />
+              <SWEmptyState
+                icon="receipt-outline"
+                title="Nothing due yet"
+                subtitle="Completed sessions this week will show up here"
+              />
+            </>
           ) : (
-            <TouchableOpacity
-              style={styles.billCard}
-              onPress={() => router.push("/parent-payment" as any)}
-              activeOpacity={0.85}
-            >
-              <View style={styles.billTop}>
-                <View>
-                  <Text style={styles.billLabel}>AMOUNT DUE</Text>
-                  <Text style={styles.billAmount}>${weekTotal.toFixed(0)}</Text>
-                  <Text style={styles.billSub}>{billRows.length} session{billRows.length !== 1 ? "s" : ""} · {weekLabel}</Text>
-                </View>
-                <View style={styles.billPayBtn}>
-                  <Ionicons name="card-outline" size={16} color={PRIMARY} />
-                  <Text style={styles.billPayBtnText}>Pay</Text>
-                </View>
+            <View style={styles.billCard}>
+              <Text style={styles.billLabel}>This Week&apos;s Bill</Text>
+              <View style={styles.billAmountRow}>
+                <Text style={styles.billAmount}>${dollars}</Text>
+                <Text style={styles.billCents}>.{cents}</Text>
               </View>
-              <View style={styles.billDivider} />
-              {billRows.map((s) => {
-                const d = new Date(s.session_date + "T00:00:00");
-                const dayLabel = d.toLocaleDateString("en-US", { weekday: "short" });
-                return (
-                  <View key={s.id} style={styles.billRow}>
-                    <Text style={styles.billRowDate}>{dayLabel}</Text>
-                    <Text style={styles.billRowStudent}>{s.student_name.split(" ")[0]}</Text>
-                    <Text style={styles.billRowSubject} numberOfLines={1}>{s.subject}</Text>
-                    <Text style={styles.billRowPrice}>${s.price.toFixed(0)}</Text>
-                  </View>
-                );
-              })}
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* My Students */}
-        <View style={styles.section}>
-          <View style={styles.sectionRow}>
-            <Text style={styles.sectionTitle}>My Students</Text>
-            <TouchableOpacity onPress={() => router.push("/(parent-tabs)/profile")}>
-              <Text style={styles.seeAll}>Manage</Text>
-            </TouchableOpacity>
-          </View>
-
-          {students.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Ionicons name="people-outline" size={20} color="#cbd5e1" />
-              <Text style={styles.emptyBoxText}>No students added yet — add one from your profile</Text>
-            </View>
-          ) : (
-            <View style={styles.studentRow}>
-              {students.map((st) => (
-                <View key={st.id} style={styles.studentCard}>
-                  <View style={[styles.studentAvatar, { backgroundColor: avatarColor(st.id) }]}>
-                    <Text style={styles.studentAvatarText}>{getInitials(st.full_name)}</Text>
-                  </View>
-                  <Text style={styles.studentName}>{st.full_name.split(" ")[0]}</Text>
-                  <Text style={styles.studentGrade}>{st.grade_level ?? "—"}</Text>
-                </View>
-              ))}
+              <Text style={styles.billSub}>
+                {billRows.length} session{billRows.length !== 1 ? "s" : ""} · {weekLabel}
+              </Text>
+              <SWButton
+                label="Pay Now"
+                onPress={() => router.push("/parent-payment" as any)}
+                style={{ marginTop: 16 }}
+              />
             </View>
           )}
         </View>
-
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#fff" },
-  scroll: { paddingBottom: 110 },
+  safe: { flex: 1, backgroundColor: SW.color.surface },
+  scroll: { paddingBottom: 130 },
 
-  header: {
-    flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between",
-    paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20,
-  },
-  greeting: { fontSize: 22, fontWeight: "800", color: "#0f172a" },
-  dateText:  { fontSize: 13, color: "#94a3b8", marginTop: 2 },
-  iconBtn: {
-    width: 42, height: 42, borderRadius: 21,
-    backgroundColor: CARD_BG, alignItems: "center", justifyContent: "center", marginTop: 4,
-  },
+  headingWrap: { paddingHorizontal: SW.space.margin, marginBottom: 20 },
+  heading: { ...SW.type.headlineLg, color: SW.color.onSurface },
+  subheading: { ...SW.type.bodyMd, color: SW.color.muted, marginTop: 4 },
 
-  requestBtn: {
-    backgroundColor: PRIMARY, borderRadius: 20,
-    marginHorizontal: 20, paddingHorizontal: 20, paddingVertical: 18,
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+  hero: {
+    marginHorizontal: SW.space.margin,
     marginBottom: 28,
-    shadowColor: PRIMARY, shadowOpacity: 0.35, shadowRadius: 14,
-    shadowOffset: { width: 0, height: 5 }, elevation: 8,
+    backgroundColor: SW.color.primaryContainer,
+    borderRadius: SW.radius.xl,
+    padding: SW.space.cardPad + 4,
+    overflow: "hidden",
+    ...SW.shadow("#2976c7", 0.35),
   },
-  requestBtnInner: { flexDirection: "row", alignItems: "center", gap: 12 },
-  requestBtnText:  { color: "#fff", fontSize: 17, fontWeight: "700" },
+  heroCircle: {
+    position: "absolute",
+    right: -70,
+    bottom: -90,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  heroTitle: { fontFamily: SW.font.bold, fontSize: 20, lineHeight: 27, color: "#fff", marginBottom: 8 },
+  heroBody: { ...SW.type.bodyMd, color: "rgba(255,255,255,0.9)", marginBottom: 18 },
 
-  section: { paddingHorizontal: 20, marginBottom: 28 },
-  sectionRow: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14,
-  },
-  sectionTitle: { fontSize: 17, fontWeight: "700", color: "#0f172a" },
-  seeAll: { fontSize: 13, color: PRIMARY, fontWeight: "600" },
+  section: { paddingHorizontal: SW.space.margin, marginBottom: 28 },
 
-  emptyBox: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    backgroundColor: "#f8fafc", borderRadius: 16,
-    paddingVertical: 16, paddingHorizontal: 16,
-    borderWidth: 1, borderColor: "#e2e8f0",
+  studentScroll: { marginHorizontal: -SW.space.margin },
+  studentRow: { gap: 18, paddingHorizontal: SW.space.margin },
+  studentItem: { alignItems: "center", gap: 6, width: 84 },
+  studentAvatar: {
+    width: 68, height: 68, borderRadius: 34,
+    alignItems: "center", justifyContent: "center",
   },
-  emptyBoxText: { color: "#94a3b8", fontSize: 13, flex: 1, lineHeight: 18 },
+  studentAvatarText: { fontFamily: "Quicksand_700Bold", fontSize: 22 },
+  studentName: { ...SW.type.labelMd, color: SW.color.onSurface },
+  gradeChip: { borderRadius: SW.radius.full, paddingHorizontal: 10, paddingVertical: 3 },
+  gradeChipText: { ...SW.type.labelSm },
+  addAvatar: {
+    width: 68, height: 68, borderRadius: 34,
+    borderWidth: 2, borderStyle: "dashed", borderColor: SW.color.outline,
+    alignItems: "center", justifyContent: "center",
+  },
 
-  sessionList: { borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 20, overflow: "hidden" },
-  sessionRow:  { flexDirection: "row", alignItems: "center", gap: 12, padding: 16 },
-  sessionAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  sessionAvatarText: { color: PRIMARY, fontSize: 15, fontWeight: "700" },
-  sessionName:    { fontSize: 14, fontWeight: "700", color: "#0f172a", marginBottom: 2 },
-  sessionSubject: { fontSize: 12, color: "#64748b", marginBottom: 4 },
-  sessionMeta:    { flexDirection: "row", alignItems: "center", gap: 4 },
-  sessionMetaText:{ fontSize: 11, color: "#94a3b8" },
-  formatBadge:    { borderRadius: 10, paddingHorizontal: 9, paddingVertical: 4 },
-  formatText:     { fontSize: 11, fontWeight: "700" },
-  divider:        { height: 1, backgroundColor: "#f1f5f9", marginHorizontal: 16 },
+  sessionCard: { flexDirection: "row", alignItems: "center", gap: 14, padding: 16 },
+  subjectIcon: {
+    width: 52, height: 52, borderRadius: 26,
+    alignItems: "center", justifyContent: "center",
+  },
+  sessionTitle: { ...SW.type.bodyLg, fontFamily: SW.font.bold, color: SW.color.onSurface },
+  sessionMeta: { ...SW.type.bodyMd, fontSize: 14, color: SW.color.onSurfaceVariant, marginTop: 1 },
+  sessionSub: { ...SW.type.labelSm, fontFamily: SW.font.medium, color: SW.color.muted, marginTop: 2 },
 
-  studentRow: { flexDirection: "row", gap: 12, flexWrap: "wrap" },
-  studentCard: {
-    width: 100, backgroundColor: CARD_BG, borderRadius: 20,
-    padding: 16, alignItems: "center", gap: 6,
+  billCard: {
+    backgroundColor: SW.color.surfaceHigh,
+    borderRadius: SW.radius.xl,
+    padding: SW.space.cardPad + 4,
   },
-  studentAvatar: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", marginBottom: 2 },
-  studentAvatarText: { color: PRIMARY, fontSize: 18, fontWeight: "700" },
-  studentName:  { fontSize: 14, fontWeight: "700", color: "#0f172a" },
-  studentGrade: { fontSize: 11, color: "#64748b" },
-
-  billCard: { borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 20, overflow: "hidden" },
-  billTop: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    padding: 16, backgroundColor: CARD_BG,
-  },
-  billLabel:  { fontSize: 11, fontWeight: "700", color: "#64748b", letterSpacing: 0.8, marginBottom: 3 },
-  billAmount: { fontSize: 32, fontWeight: "800", color: PRIMARY, lineHeight: 36 },
-  billSub:    { fontSize: 11, color: "#94a3b8", marginTop: 3 },
-  billPayBtn: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "#fff", borderRadius: 20,
-    paddingHorizontal: 16, paddingVertical: 10,
-    borderWidth: 1.5, borderColor: PRIMARY,
-  },
-  billPayBtnText: { color: PRIMARY, fontSize: 13, fontWeight: "700" },
-  billDivider:    { height: 1, backgroundColor: "#e2e8f0" },
-  billRow: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 16, paddingVertical: 11, gap: 10,
-    borderBottomWidth: 1, borderBottomColor: "#f1f5f9",
-  },
-  billRowDate:    { width: 30, fontSize: 11, fontWeight: "700", color: "#94a3b8" },
-  billRowStudent: { width: 50, fontSize: 13, fontWeight: "600", color: "#0f172a" },
-  billRowSubject: { flex: 1, fontSize: 12, color: "#64748b" },
-  billRowPrice:   { fontSize: 14, fontWeight: "800", color: "#0f172a" },
+  billLabel: { ...SW.type.bodyMd, color: SW.color.onSurfaceVariant },
+  billAmountRow: { flexDirection: "row", alignItems: "flex-start", marginTop: 6 },
+  billAmount: { fontFamily: SW.font.bold, fontSize: 44, lineHeight: 50, color: SW.color.primary },
+  billCents: { fontFamily: SW.font.bold, fontSize: 18, color: SW.color.primary, marginTop: 6 },
+  billSub: { ...SW.type.bodyMd, fontSize: 13, color: SW.color.muted, marginTop: 2 },
 });

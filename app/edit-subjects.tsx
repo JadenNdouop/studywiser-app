@@ -2,7 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { USE_MOCK } from "../constants/mockData";
 import { useAuth } from "../context/auth";
 import { supabase } from "../lib/supabase";
 
@@ -31,6 +32,7 @@ const ALL_SUBJECTS = {
 };
 
 export default function EditSubjectsScreen() {
+  const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving,   setSaving]   = useState(false);
@@ -64,6 +66,12 @@ export default function EditSubjectsScreen() {
       Alert.alert("No subjects selected", "Please select at least one subject.");
       return;
     }
+    if (USE_MOCK) {
+      Alert.alert("Saved!", "Your subjects have been updated.", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+      return;
+    }
     const userId = profile?.id ?? (await supabase.auth.getUser()).data.user?.id;
     if (!userId) {
       Alert.alert("Error", "You must be logged in to save changes.");
@@ -86,9 +94,9 @@ export default function EditSubjectsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color={PRIMARY} />
         </TouchableOpacity>

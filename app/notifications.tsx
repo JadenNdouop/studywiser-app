@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/auth";
 import { supabase } from "../lib/supabase";
 
@@ -62,6 +62,7 @@ function groupNotifications(rows: NotifRow[]): NotifGroup[] {
 }
 
 export default function NotificationsScreen() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile } = useAuth();
   const [notifications, setNotifications] = useState<NotifRow[]>([]);
@@ -93,13 +94,19 @@ export default function NotificationsScreen() {
     await supabase.from("notifications").update({ read: true }).eq("id", id);
   }
 
+  function goDashboard() {
+    if (profile?.role === "tutor")        router.replace("/(tutor-tabs)");
+    else if (profile?.role === "student") router.replace("/(student-tabs)");
+    else                                  router.replace("/(parent-tabs)");
+  }
+
   const newCount = notifications.filter((n) => !n.read).length;
   const groups   = groupNotifications(notifications);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={22} color={PRIMARY} />
         </TouchableOpacity>
@@ -114,11 +121,27 @@ export default function NotificationsScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {notifications.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconWrap}>
-              <Ionicons name="notifications-outline" size={34} color={PRIMARY} />
+            <View style={styles.emptyHalo}>
+              <View style={styles.emptyBell}>
+                <Ionicons name="notifications" size={54} color="#006b5b" />
+              </View>
+              <Text style={styles.zBig}>z</Text>
+              <Text style={styles.zMid}>z</Text>
+              <Text style={styles.zSmall}>z</Text>
             </View>
-            <Text style={styles.emptyTitle}>All caught up</Text>
-            <Text style={styles.emptyBody}>You don't have any notifications yet.</Text>
+            <Text style={styles.emptyTitle}>You're all caught up!</Text>
+            <Text style={styles.emptyBody}>
+              Check back later for updates on your sessions and account. We'll let
+              you know when something exciting happens!
+            </Text>
+            <TouchableOpacity
+              style={styles.dashBtn}
+              activeOpacity={0.9}
+              onPress={goDashboard}
+            >
+              <Text style={styles.dashBtnText}>Go to Dashboard</Text>
+            </TouchableOpacity>
+            <Text style={styles.clearedLabel}>RECENTLY CLEARED</Text>
           </View>
         ) : (
           groups.map((group) => (
@@ -135,7 +158,7 @@ export default function NotificationsScreen() {
               </View>
 
               {group.items.map((item) => {
-                const ic = ICON_MAP[item.type] ?? ICON_MAP.session;
+                const ic = ICON_MAP[item.type] ?? ICON_MAP.session_reminder;
                 return (
                   <TouchableOpacity
                     key={item.id}
@@ -205,11 +228,28 @@ const styles = StyleSheet.create({
   timeAgo:   { fontSize: 12, color: "#94a3b8", fontWeight: "500" },
   dot:       { width: 8, height: 8, borderRadius: 4, backgroundColor: PRIMARY },
 
-  emptyContainer: { alignItems: "center", paddingTop: 100, gap: 14 },
-  emptyIconWrap:  {
-    width: 72, height: 72, borderRadius: 36,
-    backgroundColor: LAVENDER, alignItems: "center", justifyContent: "center",
+  emptyContainer: { alignItems: "center", paddingTop: 60, paddingHorizontal: 32 },
+  emptyHalo: {
+    width: 220, height: 220, borderRadius: 110,
+    backgroundColor: "#d3f5ec", alignItems: "center", justifyContent: "center",
+    marginBottom: 32,
   },
-  emptyTitle: { fontSize: 18, fontWeight: "700", color: "#0f172a" },
-  emptyBody:  { fontSize: 14, color: "#94a3b8", textAlign: "center" },
+  emptyBell: {
+    width: 150, height: 150, borderRadius: 75,
+    backgroundColor: "#ffffff", alignItems: "center", justifyContent: "center",
+  },
+  zBig:   { position: "absolute", top: 18,  right: 22, color: "#4b9c8a", fontSize: 30, fontWeight: "800" },
+  zMid:   { position: "absolute", top: 44,  right: 6,  color: "#6bb3a3", fontSize: 22, fontWeight: "800" },
+  zSmall: { position: "absolute", top: 68,  right: -6, color: "#8cc7bb", fontSize: 15, fontWeight: "800" },
+  emptyTitle: { fontSize: 26, fontWeight: "800", color: "#0f172a", textAlign: "center", marginBottom: 14 },
+  emptyBody:  { fontSize: 15, color: "#64748b", textAlign: "center", lineHeight: 23, marginBottom: 32 },
+  dashBtn: {
+    backgroundColor: PRIMARY, borderRadius: 9999,
+    paddingVertical: 16, paddingHorizontal: 44, marginBottom: 48,
+  },
+  dashBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  clearedLabel: {
+    alignSelf: "flex-start", color: "#94a3b8",
+    fontSize: 13, fontWeight: "700", letterSpacing: 1,
+  },
 });

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -11,7 +12,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { USE_MOCK } from "../constants/mockData";
+import { supabase } from "../lib/supabase";
 
 const PRIMARY = "#014aad";
 const INPUT_BG = "#eef2ff";
@@ -51,17 +54,52 @@ function PasswordField({
 }
 
 export default function PasswordManagerScreen() {
+  const insets = useSafeAreaInsets();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleChangePassword() {
+    if (!next || !confirm) {
+      Alert.alert("Missing fields", "Please fill in the new password fields.");
+      return;
+    }
+    if (next.length < 6) {
+      Alert.alert("Weak password", "Password must be at least 6 characters.");
+      return;
+    }
+    if (next !== confirm) {
+      Alert.alert("Passwords don't match", "Please make sure both passwords are the same.");
+      return;
+    }
+
+    if (USE_MOCK) {
+      Alert.alert("Password changed", "Your password has been updated.", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+      return;
+    }
+
+    setSaving(true);
+    const { error } = await supabase.auth.updateUser({ password: next });
+    setSaving(false);
+    if (error) {
+      Alert.alert("Couldn't update password", error.message);
+      return;
+    }
+    Alert.alert("Password changed", "Your password has been updated.", [
+      { text: "OK", onPress: () => router.back() },
+    ]);
+  }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={24} color={PRIMARY} />
           </TouchableOpacity>
@@ -91,11 +129,12 @@ export default function PasswordManagerScreen() {
           </View>
 
           <TouchableOpacity
-            style={styles.saveBtn}
-            onPress={() => router.back()}
+            style={[styles.saveBtn, saving && { opacity: 0.7 }]}
+            onPress={handleChangePassword}
             activeOpacity={0.85}
+            disabled={saving}
           >
-            <Text style={styles.saveBtnText}>Change Password</Text>
+            <Text style={styles.saveBtnText}>{saving ? "Saving…" : "Change Password"}</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>

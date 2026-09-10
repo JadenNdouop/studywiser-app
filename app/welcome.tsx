@@ -3,15 +3,21 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const PRIMARY = "#014aad";
-const swLogo = require("../assets/images/swlogo.jpg");
+const NAVY = "#013a8f";
+const MINT = "#96f4dd";
+const swLogo = require("../assets/images/swlogo-white.jpg");
 
 export default function WelcomeScreen() {
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+      {/* Soft gradient accents */}
+      <View style={[styles.blob, styles.blobMint]} pointerEvents="none" />
+      <View style={[styles.blob, styles.blobPeach]} pointerEvents="none" />
+
       <View style={styles.container}>
         {/* Logo area */}
         <View style={styles.logoArea}>
-          <View style={styles.logoBox}>
+          <View style={styles.logoTile}>
             <Image source={swLogo} style={styles.logo} resizeMode="contain" />
           </View>
           <Text style={styles.brand}>StudyWiser</Text>
@@ -21,21 +27,21 @@ export default function WelcomeScreen() {
         <View style={styles.bottom}>
           <Text style={styles.tagline}>
             Connect with expert tutors, track progress, and achieve your
-            academic goals — all in one place.
+            academic goals.
           </Text>
 
           <TouchableOpacity
             style={styles.loginBtn}
             onPress={() => router.push("/login")}
-            activeOpacity={0.85}
+            activeOpacity={0.9}
           >
             <Text style={styles.loginText}>Log In</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.signupBtn}
-            onPress={() => router.push("/signup")}
-            activeOpacity={0.85}
+            onPress={() => router.push("/role-select")}
+            activeOpacity={0.9}
           >
             <Text style={styles.signupText}>Sign Up</Text>
           </TouchableOpacity>
@@ -46,13 +52,13 @@ export default function WelcomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-  },
+  safe: { flex: 1, backgroundColor: "#f7f9fb" },
+  blob: { position: "absolute", borderRadius: 9999, opacity: 0.35 },
+  blobMint: { width: 300, height: 300, backgroundColor: "#c9f7ec", top: -80, right: -70 },
+  blobPeach: { width: 300, height: 300, backgroundColor: "#ffe6d6", bottom: 40, left: -90 },
   container: {
     flex: 1,
-    paddingHorizontal: 32,
+    paddingHorizontal: 28,
     justifyContent: "space-between",
     paddingBottom: 40,
   },
@@ -60,54 +66,60 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 16,
+    gap: 22,
   },
-  logoBox: {
-    width: 90,
-    height: 90,
-    borderRadius: 20,
+  logoTile: {
+    width: 132,
+    height: 132,
+    borderRadius: 36,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
     overflow: "hidden",
+    shadowColor: "#0b3a7a",
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.14,
+    shadowRadius: 28,
+    elevation: 5,
   },
-  logo: {
-    width: "100%",
-    height: "100%",
-  },
+  logo: { width: "62%", height: "62%" },
   brand: {
     color: PRIMARY,
-    fontSize: 26,
-    fontWeight: "600",
+    fontSize: 34,
+    fontWeight: "700",
     letterSpacing: 0.3,
   },
-  bottom: {
-    gap: 14,
-  },
+  bottom: { gap: 16 },
   tagline: {
     textAlign: "center",
-    color: "#64748b",
-    fontSize: 13,
-    lineHeight: 20,
-    marginBottom: 6,
+    color: "#414751",
+    fontSize: 16,
+    lineHeight: 24,
+    marginBottom: 10,
+    paddingHorizontal: 8,
   },
   loginBtn: {
-    backgroundColor: PRIMARY,
-    borderRadius: 30,
-    paddingVertical: 16,
+    backgroundColor: NAVY,
+    borderRadius: 9999,
+    paddingVertical: 18,
     alignItems: "center",
+    shadowColor: NAVY,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  loginText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  loginText: { color: "#ffffff", fontSize: 17, fontWeight: "700" },
   signupBtn: {
-    backgroundColor: "#c7d7f5",
-    borderRadius: 30,
-    paddingVertical: 16,
+    backgroundColor: MINT,
+    borderRadius: 9999,
+    paddingVertical: 18,
     alignItems: "center",
+    shadowColor: "#3fbfa3",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  signupText: {
-    color: PRIMARY,
-    fontSize: 16,
-    fontWeight: "600",
-  },
+  signupText: { color: "#04241d", fontSize: 17, fontWeight: "700" },
 });

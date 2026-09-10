@@ -1,9 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/auth";
-import { supabase } from "../lib/supabase";
 
 const PRIMARY = "#014aad";
 const ICON_BG = "#eef2ff";
@@ -14,6 +13,7 @@ const ITEMS = [
 ];
 
 export default function SettingsScreen() {
+  const insets = useSafeAreaInsets();
   const { signOut } = useAuth();
 
   async function handleSignOut() {
@@ -62,18 +62,18 @@ export default function SettingsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={PRIMARY} />
+    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backCircle}>
+          <Ionicons name="arrow-back" size={22} color={PRIMARY} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Settings</Text>
-        <View style={styles.backBtn} />
+        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Main options */}
-        <View style={styles.menu}>
+        <View style={styles.card}>
           {ITEMS.map((item, i, arr) => (
             <View key={item.label}>
               <TouchableOpacity
@@ -93,7 +93,7 @@ export default function SettingsScreen() {
         </View>
 
         {/* Sign Out */}
-        <View style={styles.menu}>
+        <View style={[styles.card, styles.cardSpacing]}>
           <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={handleSignOut}>
             <View style={[styles.iconCircle, styles.iconCircleWarn]}>
               <Ionicons name="log-out-outline" size={20} color="#f59e0b" />
@@ -113,35 +113,45 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#fff" },
+  safe: { flex: 1, backgroundColor: "#f7f9fb" },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 16,
+    paddingBottom: 8,
   },
-  backBtn: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
-  headerTitle: { color: PRIMARY, fontSize: 18, fontWeight: "700" },
-  scroll: { paddingBottom: 60, gap: 20, paddingTop: 4 },
+  backCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#eceef0",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerSpacer: { width: 44, height: 44 },
+  headerTitle: { color: "#191c1e", fontSize: 22, fontWeight: "700" },
+  scroll: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 60 },
 
-  menu: {
-    marginHorizontal: 20,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 16,
-    overflow: "hidden",
+  card: {
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    padding: 8,
+    shadowColor: "#005da7",
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.06,
+    shadowRadius: 28,
+    elevation: 2,
   },
+  cardSpacing: { marginTop: 20 },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     gap: 14,
-    backgroundColor: "#fff",
   },
-  divider: { height: 1, backgroundColor: "#f1f5f9", marginLeft: 72 },
+  divider: { height: 1, backgroundColor: "#f1f5f9", marginLeft: 68 },
   iconCircle: {
     width: 42,
     height: 42,
@@ -151,9 +161,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   iconCircleWarn: { backgroundColor: "#fffbeb" },
-  rowLabel:     { flex: 1, fontSize: 15, fontWeight: "500", color: "#1e293b" },
+  rowLabel:     { flex: 1, fontSize: 15, fontWeight: "600", color: "#191c1e" },
   rowLabelWarn: { color: "#f59e0b" },
 
-  deleteRow: { alignItems: "center", paddingVertical: 8, marginTop: 20 },
-  deleteText: { fontSize: 13, color: "#ef4444", fontWeight: "500" },
+  deleteRow: { alignItems: "center", paddingVertical: 8, marginTop: 24 },
+  deleteText: { fontSize: 13, color: "#ef4444", fontWeight: "600" },
 });

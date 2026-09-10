@@ -25,6 +25,20 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## Environment
+
+Copy `.env.example` to `.env` and fill in your Supabase project's URL/anon key
+(`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`) before running the app.
+See `BACKEND-PLAN.md` for the full backend setup, including the Supabase CLI workflow
+(`npm run db:login` / `db:link` / `db:push`).
+
+## Testing
+
+- `npm test` — unit tests (pure logic, no network; e.g. `lib/dob.ts`).
+- `npm run test:integration` — integration tests against a real Supabase instance
+  (signup trigger, RLS boundaries, accept-request flow). Needs `supabase start`
+  (Docker) first — see `__tests__/integration/README.md`.
+
 ## Get a fresh project
 
 When you're ready, run:

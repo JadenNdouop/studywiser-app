@@ -44,3 +44,10 @@ app-example
 
 # Claude Code
 .claude/
+
+# Environment
+.env
+.env.local
+
+# FUSE mount temp files
+.fuse_hidden*

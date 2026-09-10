@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import {
@@ -14,36 +14,45 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { GoogleButton } from "../components/GoogleButton";
+import { formatDOBInput } from "../lib/dob";
+import { formatPhoneInput } from "../lib/phone";
 import { supabase } from "../lib/supabase";
 
 WebBrowser.maybeCompleteAuthSession();
 
 const PRIMARY = "#014aad";
-const INPUT_BG = "#eef2ff";
+const FIELD_BG = "#e6e8ea";
+
+type Role = "parent" | "tutor" | "student";
+
+const ROLE_OPTIONS: {
+  role: Role;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  badgeBg: string;
+  accent: string;
+  tint: string;
+}[] = [
+  { role: "parent",  label: "Parent",  icon: "people",    badgeBg: "#ffdcc4", accent: "#8b4c11", tint: "#fff4ec" },
+  { role: "student", label: "Student", icon: "school",    badgeBg: "#96f4dd", accent: "#006b5b", tint: "#e6fbf5" },
+  { role: "tutor",   label: "Tutor",   icon: "briefcase", badgeBg: "#d4e3ff", accent: "#014aad", tint: "#eaf1ff" },
+];
 
 export default function SignUpScreen() {
+  const insets = useSafeAreaInsets();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [mobile, setMobile] = useState("");
   const [dob, setDob] = useState("");
 
-  function formatPhone(raw: string) {
-    const digits = raw.replace(/\D/g, "").slice(0, 10);
-    if (digits.length <= 3) return digits;
-    if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
+  const params = useLocalSearchParams<{ role?: string }>();
+  const initialRole =
+    params.role === "tutor" || params.role === "student" ? params.role : "parent";
+  const [role, setRole] = useState<Role>(initialRole);
 
-  function formatDOB(raw: string) {
-    const digits = raw.replace(/\D/g, "").slice(0, 8);
-    if (digits.length <= 2) return digits;
-    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-  }
-  const [role, setRole] = useState<"parent" | "tutor" | "student">("parent");
-
-  async function handleOAuth(provider: "google" | "facebook") {
+  async function handleOAuth(provider: "google") {
     try {
       const redirectTo = Linking.createURL("/");
       const { data, error } = await supabase.auth.signInWithOAuth({
@@ -90,17 +99,20 @@ export default function SignUpScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={PRIMARY} />
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+          <TouchableOpacity
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/welcome"))}
+            style={styles.backBtn}
+          >
+            <Ionicons name="chevron-back" size={26} color={PRIMARY} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>New Account</Text>
+          <Text style={styles.headerTitle}>Create Account</Text>
           <View style={styles.backBtn} />
         </View>
 
@@ -114,7 +126,7 @@ export default function SignUpScreen() {
           <TextInput
             style={styles.input}
             placeholder="Jane Smith"
-            placeholderTextColor="#aab4d4"
+            placeholderTextColor="#9aa0ab"
             value={fullName}
             onChangeText={setFullName}
             autoCapitalize="words"
@@ -124,8 +136,8 @@ export default function SignUpScreen() {
           <Text style={styles.label}>Email</Text>
           <TextInput
             style={styles.input}
-            placeholder="example@example.com"
-            placeholderTextColor="#aab4d4"
+            placeholder="hello@studio.com"
+            placeholderTextColor="#9aa0ab"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -136,10 +148,10 @@ export default function SignUpScreen() {
           <Text style={styles.label}>Mobile Number</Text>
           <TextInput
             style={styles.input}
-            placeholder="XXX-XXX-XXXX"
-            placeholderTextColor="#aab4d4"
+            placeholder="(555) 000-0000"
+            placeholderTextColor="#9aa0ab"
             value={mobile}
-            onChangeText={(t) => setMobile(formatPhone(t))}
+            onChangeText={(t) => setMobile(formatPhoneInput(t))}
             keyboardType="number-pad"
           />
 
@@ -147,85 +159,67 @@ export default function SignUpScreen() {
           <Text style={styles.label}>Date of Birth</Text>
           <TextInput
             style={styles.input}
-            placeholder="MM/DD/YYYY"
-            placeholderTextColor="#aab4d4"
+            placeholder="MM / DD / YYYY"
+            placeholderTextColor="#9aa0ab"
             value={dob}
-            onChangeText={(t) => setDob(formatDOB(t))}
+            onChangeText={(t) => setDob(formatDOBInput(t))}
             keyboardType="number-pad"
           />
 
           {/* Role selection */}
-          <Text style={styles.label}>I am a...</Text>
+          <Text style={styles.roleHeading}>I am joining as a...</Text>
           <View style={styles.roleRow}>
-            <TouchableOpacity
-              style={[styles.roleBtn, role === "parent" && styles.roleBtnActive]}
-              onPress={() => setRole("parent")}
-            >
-              <Ionicons name="people-outline" size={20} color={role === "parent" ? "#fff" : PRIMARY} />
-              <Text style={[styles.roleBtnText, role === "parent" && styles.roleBtnTextActive]}>
-                Parent
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.roleBtn, role === "student" && styles.roleBtnActive]}
-              onPress={() => setRole("student")}
-            >
-              <Ionicons name="school-outline" size={20} color={role === "student" ? "#fff" : PRIMARY} />
-              <Text style={[styles.roleBtnText, role === "student" && styles.roleBtnTextActive]}>
-                Student
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.roleBtn, role === "tutor" && styles.roleBtnActive]}
-              onPress={() => setRole("tutor")}
-            >
-              <Ionicons name="briefcase-outline" size={20} color={role === "tutor" ? "#fff" : PRIMARY} />
-              <Text style={[styles.roleBtnText, role === "tutor" && styles.roleBtnTextActive]}>
-                Tutor
-              </Text>
-            </TouchableOpacity>
+            {ROLE_OPTIONS.map((opt) => {
+              const selected = role === opt.role;
+              return (
+                <TouchableOpacity
+                  key={opt.role}
+                  style={[
+                    styles.roleCard,
+                    selected && { borderColor: opt.accent, backgroundColor: opt.tint },
+                  ]}
+                  activeOpacity={0.85}
+                  onPress={() => setRole(opt.role)}
+                >
+                  <View style={[styles.roleBadge, { backgroundColor: opt.badgeBg }]}>
+                    <Ionicons name={opt.icon} size={26} color={opt.accent} />
+                  </View>
+                  <Text style={styles.roleLabel}>{opt.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
           {/* Terms */}
           <Text style={styles.terms}>
-            By continuing, you agree to{" "}
-            <Text style={styles.termsLink}>Terms of Use</Text>
+            By continuing, you agree to our{" "}
+            <Text style={styles.termsLink}>Terms</Text>
             {" "}and{" "}
             <Text style={styles.termsLink}>Privacy Policy.</Text>
           </Text>
 
-          {/* Next button */}
+          {/* Get Started button */}
           <TouchableOpacity
             style={styles.primaryBtn}
             onPress={handleNext}
-            activeOpacity={0.85}
+            activeOpacity={0.9}
           >
-            <Text style={styles.primaryBtnText}>Next</Text>
+            <Text style={styles.primaryBtnText}>Get Started</Text>
+            <Ionicons name="arrow-forward" size={20} color="#fff" />
           </TouchableOpacity>
 
           {/* Social divider */}
-          <Text style={styles.orText}>or sign up with</Text>
-
-          <View style={styles.socialRow}>
-            <TouchableOpacity
-              style={styles.socialBtn}
-              activeOpacity={0.7}
-              onPress={() => handleOAuth("google")}
-            >
-              <Ionicons name="logo-google" size={22} color={PRIMARY} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.socialBtn}
-              activeOpacity={0.7}
-              onPress={() => handleOAuth("facebook")}
-            >
-              <Ionicons name="logo-facebook" size={22} color={PRIMARY} />
-            </TouchableOpacity>
+          <View style={styles.dividerRow}>
+            <View style={styles.divider} />
+            <Text style={styles.dividerText}>OR JOIN WITH</Text>
+            <View style={styles.divider} />
           </View>
+
+          <GoogleButton onPress={() => handleOAuth("google")} style={styles.googleBtnSpacing} />
 
           {/* Log in link */}
           <View style={styles.switchRow}>
-            <Text style={styles.switchText}>Already have an account? </Text>
+            <Text style={styles.switchText}>Already a member? </Text>
             <TouchableOpacity onPress={() => router.replace("/login")}>
               <Text style={styles.switchLink}>Log In</Text>
             </TouchableOpacity>
@@ -237,72 +231,81 @@ export default function SignUpScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#fff" },
+  safe: { flex: 1, backgroundColor: "#f7f9fb" },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: 8,
   },
-  backBtn: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
-  headerTitle: { color: PRIMARY, fontSize: 18, fontWeight: "700" },
-  scroll: { paddingHorizontal: 28, paddingBottom: 40 },
-  label: { color: "#1e293b", fontSize: 14, fontWeight: "500", marginBottom: 8, marginTop: 4 },
+  backBtn: { width: 44, height: 44, justifyContent: "center", alignItems: "center" },
+  headerTitle: { color: PRIMARY, fontSize: 22, fontWeight: "700" },
+  scroll: { paddingHorizontal: 24, paddingBottom: 40, paddingTop: 8 },
+  label: { color: "#616770", fontSize: 14, fontWeight: "600", marginBottom: 8, marginLeft: 6, marginTop: 12 },
   input: {
-    backgroundColor: INPUT_BG,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 14,
-    color: "#1e293b",
-    marginBottom: 16,
+    backgroundColor: FIELD_BG,
+    borderRadius: 9999,
+    paddingHorizontal: 22,
+    paddingVertical: 16,
+    fontSize: 16,
+    color: "#191c1e",
+    fontWeight: "500",
+    borderWidth: 2,
+    borderColor: "transparent",
   },
-  roleRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
-  roleBtn: {
+  roleHeading: { color: "#414751", fontSize: 15, fontWeight: "700", marginTop: 24, marginBottom: 14, marginLeft: 6 },
+  roleRow: { flexDirection: "row", gap: 12 },
+  roleCard: {
     flex: 1,
+    alignItems: "center",
+    paddingVertical: 18,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: "#e0e3e5",
+    backgroundColor: "#f2f4f6",
+  },
+  roleBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  roleLabel: { color: "#191c1e", fontSize: 13, fontWeight: "700" },
+  terms: {
+    textAlign: "center",
+    color: "#717783",
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 24,
+    marginBottom: 22,
+    paddingHorizontal: 12,
+  },
+  termsLink: { color: PRIMARY, fontWeight: "700" },
+  primaryBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: PRIMARY,
-  },
-  roleBtnActive: { backgroundColor: PRIMARY },
-  roleBtnText: { color: PRIMARY, fontSize: 14, fontWeight: "600" },
-  roleBtnTextActive: { color: "#fff" },
-  terms: {
-    textAlign: "center",
-    color: "#64748b",
-    fontSize: 12,
-    lineHeight: 18,
-    marginBottom: 20,
-    marginTop: 8,
-  },
-  termsLink: { color: PRIMARY, fontWeight: "500" },
-  primaryBtn: {
+    gap: 10,
     backgroundColor: PRIMARY,
-    borderRadius: 30,
-    paddingVertical: 16,
-    alignItems: "center",
-    marginBottom: 20,
+    borderRadius: 9999,
+    paddingVertical: 19,
+    marginBottom: 30,
+    shadowColor: "#005da7",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 5,
   },
-  primaryBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  orText: { textAlign: "center", color: "#94a3b8", fontSize: 13, marginBottom: 16 },
-  socialRow: { flexDirection: "row", justifyContent: "center", gap: 16, marginBottom: 28 },
-  socialBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 1.5,
-    borderColor: "#e2e8f0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  primaryBtnText: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  dividerRow: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 22 },
+  divider: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: "#c1c7d3" },
+  dividerText: { color: "#717783", fontSize: 11, fontWeight: "800", letterSpacing: 1.5 },
+  googleBtnSpacing: { marginBottom: 28 },
   switchRow: { flexDirection: "row", justifyContent: "center" },
-  switchText: { color: "#64748b", fontSize: 13 },
-  switchLink: { color: PRIMARY, fontSize: 13, fontWeight: "600" },
+  switchText: { color: "#414751", fontSize: 14, fontWeight: "600" },
+  switchLink: { color: PRIMARY, fontSize: 14, fontWeight: "700" },
 });

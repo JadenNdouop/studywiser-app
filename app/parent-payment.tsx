@@ -2,17 +2,18 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SWButton, SWEmptyState, avatarTint, getInitials } from "../components/sw";
+import { SW } from "../constants/theme";
 import { useAuth } from "../context/auth";
 import { supabase } from "../lib/supabase";
 
-const PRIMARY = "#014aad";
-const CARD_BG = "#eef2ff";
+const PRIMARY = SW.color.primary;
 
-const TIER_COLOR: Record<string, { color: string; bg: string }> = {
-  Basic: { color: "#0369a1", bg: "#e0f2fe" },
-  Upper: { color: "#7c3aed", bg: "#ede9fe" },
-  SAT:   { color: "#b45309", bg: "#fef3c7" },
+const TIER_STYLE: Record<string, { bg: string; fg: string; icon: string }> = {
+  Basic: { bg: SW.color.mint,     fg: SW.color.onMint,  icon: "sparkles-outline" },
+  Upper: { bg: SW.color.coral,    fg: SW.color.onCoral, icon: "rocket-outline" },
+  SAT:   { bg: SW.color.lavender, fg: SW.color.primary, icon: "school-outline" },
 };
 const TIER_RATE: Record<string, number> = { Basic: 35, Upper: 40, SAT: 45 };
 
@@ -42,19 +43,6 @@ function weekRangeLabel(monday: Date): string {
   return `${fmt(monday)} – ${fmt(sunday)}`;
 }
 
-function getInitials(name: string): string {
-  const parts = name.trim().split(" ");
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-const AVATAR_COLORS = ["#c7d2fe","#fde8d8","#d1fae5","#fef9c3","#fee2e2","#ddd6fe"];
-function avatarColor(id: string) {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
-
 type SessionRow = {
   id: string;
   student_name: string;
@@ -73,6 +61,7 @@ type WeekGroup = {
 };
 
 export default function ParentPaymentScreen() {
+  const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const [currentWeek, setCurrentWeek] = useState<SessionRow[]>([]);
   const [history,     setHistory]     = useState<WeekGroup[]>([]);
@@ -134,6 +123,7 @@ export default function ParentPaymentScreen() {
   }
 
   const weekTotal = currentWeek.reduce((sum, s) => sum + s.price, 0);
+  const [dollars, cents] = weekTotal.toFixed(2).split(".");
   const monday    = getMondayOfWeek(new Date());
   const currentWeekLabel = weekRangeLabel(monday);
 
@@ -153,8 +143,8 @@ export default function ParentPaymentScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
+    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color={PRIMARY} />
         </TouchableOpacity>
@@ -164,62 +154,65 @@ export default function ParentPaymentScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
-        {/* Amount Due Banner */}
-        <View style={styles.dueBanner}>
-          <View>
-            <Text style={styles.dueLabel}>AMOUNT DUE</Text>
-            <Text style={styles.dueAmount}>${weekTotal.toFixed(0)}</Text>
-            <Text style={styles.dueSub}>Week of {currentWeekLabel}</Text>
+        {/* Total balance hero */}
+        <View style={styles.hero}>
+          <Text style={styles.heroLabel}>TOTAL BALANCE</Text>
+          <View style={styles.heroAmountRow}>
+            <Text style={styles.heroAmount}>${dollars}</Text>
+            <Text style={styles.heroCents}>.{cents}</Text>
           </View>
-          <TouchableOpacity style={styles.payBtn} onPress={handlePay} activeOpacity={0.85}>
-            <Ionicons name="card-outline" size={18} color={PRIMARY} />
-            <Text style={styles.payBtnText}>Pay Now</Text>
-          </TouchableOpacity>
+          <Text style={styles.heroSub}>
+            {weekTotal === 0
+              ? "Everything is up to date for your upcoming sessions."
+              : `Week of ${currentWeekLabel}`}
+          </Text>
+          <SWButton
+            label="Pay Now"
+            variant="mint"
+            icon="arrow-forward"
+            onPress={handlePay}
+            style={{ marginTop: 18 }}
+          />
         </View>
 
         <View style={styles.stripeNote}>
-          <Ionicons name="lock-closed-outline" size={13} color="#64748b" />
+          <Ionicons name="lock-closed-outline" size={13} color={SW.color.muted} />
           <Text style={styles.stripeNoteText}>Payments are processed securely via Stripe.</Text>
         </View>
 
         {/* This Week's Sessions */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>This Week's Sessions</Text>
+          <Text style={styles.sectionTitle}>This Week&apos;s Sessions</Text>
 
           {currentWeek.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Ionicons name="calendar-outline" size={20} color="#cbd5e1" />
-              <Text style={styles.emptyBoxText}>No completed sessions this week yet</Text>
-            </View>
+            <SWEmptyState
+              icon="calendar-outline"
+              title="No completed sessions this week yet"
+            />
           ) : (
-            <View style={styles.sessionList}>
-              {currentWeek.map((s, i) => {
+            <View style={{ gap: SW.space.stack }}>
+              {currentWeek.map((s) => {
                 const tier = SUBJECT_TIER[s.subject] ?? "Basic";
-                const tc   = TIER_COLOR[tier];
+                const tc   = TIER_STYLE[tier];
+                const tint = avatarTint(s.id);
                 const d    = new Date(s.session_date + "T00:00:00");
                 const dateLabel = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
                 return (
-                  <View key={s.id}>
-                    <View style={styles.sessionRow}>
-                      <View style={[styles.avatar, { backgroundColor: avatarColor(s.id) }]}>
-                        <Text style={styles.avatarText}>{getInitials(s.student_name)}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.sessionStudent}>{s.student_name}</Text>
-                        <Text style={styles.sessionSubject}>{s.subject} · {s.tutor_name}</Text>
-                        <View style={styles.sessionMeta}>
-                          <Ionicons name="calendar-outline" size={11} color="#94a3b8" />
-                          <Text style={styles.sessionMetaText}>{dateLabel} · {s.duration} min</Text>
-                        </View>
-                      </View>
-                      <View style={styles.priceCol}>
-                        <Text style={styles.sessionPrice}>${s.price.toFixed(0)}</Text>
-                        <View style={[styles.tierBadge, { backgroundColor: tc.bg }]}>
-                          <Text style={[styles.tierBadgeText, { color: tc.color }]}>{tier}</Text>
-                        </View>
+                  <View key={s.id} style={styles.sessionCard}>
+                    <View style={[styles.avatar, { backgroundColor: tint.bg }]}>
+                      <Text style={[styles.avatarText, { color: tint.fg }]}>{getInitials(s.student_name)}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.sessionStudent}>{s.student_name}</Text>
+                      <Text style={styles.sessionSubject}>{s.subject} · {s.tutor_name}</Text>
+                      <Text style={styles.sessionMetaText}>{dateLabel} · {s.duration} min</Text>
+                    </View>
+                    <View style={styles.priceCol}>
+                      <Text style={styles.sessionPrice}>${s.price.toFixed(0)}</Text>
+                      <View style={[styles.tierBadge, { backgroundColor: tc.bg }]}>
+                        <Text style={[styles.tierBadgeText, { color: tc.fg }]}>{tier}</Text>
                       </View>
                     </View>
-                    {i < currentWeek.length - 1 && <View style={styles.divider} />}
                   </View>
                 );
               })}
@@ -229,54 +222,58 @@ export default function ParentPaymentScreen() {
               </View>
             </View>
           )}
+        </View>
 
-          {/* Pricing legend */}
-          <View style={styles.pricingNote}>
-            <Text style={styles.pricingNoteTitle}>Session Rates</Text>
-            <View style={styles.pricingGrid}>
-              {Object.entries(TIER_RATE).map(([tier, rate]) => {
-                const tc = TIER_COLOR[tier];
-                const label = tier === "Basic" ? "Basic (K–8)" : tier === "Upper" ? "Upper (9–12)" : "SAT / Test Prep";
-                return (
-                  <View key={tier} style={styles.pricingRow}>
-                    <View style={[styles.pricingDot, { backgroundColor: tc.bg, borderColor: tc.color }]} />
-                    <Text style={styles.pricingTier}>{label}</Text>
-                    <Text style={[styles.pricingRate, { color: tc.color }]}>${rate} / session</Text>
+        {/* Session Rates */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Session Rates</Text>
+          <View style={{ gap: 14 }}>
+            {Object.entries(TIER_RATE).map(([tier, rate]) => {
+              const tc = TIER_STYLE[tier];
+              const label = tier === "Basic" ? "Basic" : tier === "Upper" ? "Upper-Level" : "SAT / Test Prep";
+              const sub = tier === "Basic" ? "Foundation Sessions (K–8)" : tier === "Upper" ? "Mastery Sessions (9–12)" : "Exam Prep Workshops";
+              return (
+                <View key={tier} style={[styles.rateCard, { backgroundColor: tc.bg, ...SW.shadow(tc.bg, 0.4) }]}>
+                  <View style={[styles.rateIcon, { backgroundColor: tc.fg }]}>
+                    <Ionicons name={tc.icon as any} size={20} color={tc.bg} />
                   </View>
-                );
-              })}
-            </View>
+                  <Text style={[styles.rateTier, { color: tc.fg }]}>{label}</Text>
+                  <Text style={[styles.rateSub, { color: tc.fg }]}>{sub}</Text>
+                  <View style={styles.rateAmountRow}>
+                    <Text style={[styles.rateAmount, { color: tc.fg }]}>${rate}</Text>
+                    <Text style={[styles.ratePer, { color: tc.fg }]}>/session</Text>
+                  </View>
+                </View>
+              );
+            })}
           </View>
         </View>
 
         {/* Payment History */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment History</Text>
+          <Text style={styles.sectionTitle}>History</Text>
 
           {history.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Ionicons name="receipt-outline" size={20} color="#cbd5e1" />
-              <Text style={styles.emptyBoxText}>No payment history yet</Text>
-            </View>
+            <SWEmptyState icon="receipt-outline" title="No payment history yet" />
           ) : (
-            <View style={styles.historyList}>
-              {history.map((group, i) => (
-                <View key={group.mondayStr}>
-                  <View style={styles.historyRow}>
-                    <View style={styles.historyIconWrap}>
-                      <Ionicons name="checkmark-circle" size={20} color="#10b981" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.historyWeek}>Week of {group.label}</Text>
-                      <Text style={styles.historySessions}>
-                        {group.sessions.length} session{group.sessions.length !== 1 ? "s" : ""}
-                        {" · "}
-                        {[...new Set(group.sessions.map((s) => s.student_name.split(" ")[0]))].join(", ")}
-                      </Text>
-                    </View>
-                    <Text style={styles.historyAmount}>${group.total.toFixed(0)}</Text>
+            <View style={{ gap: SW.space.stack }}>
+              {history.map((group) => (
+                <View key={group.mondayStr} style={styles.historyRow}>
+                  <View style={styles.historyIconWrap}>
+                    <Ionicons name="checkmark-circle-outline" size={22} color={SW.color.onMint} />
                   </View>
-                  {i < history.length - 1 && <View style={styles.divider} />}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.historyWeek}>Week of {group.label}</Text>
+                    <Text style={styles.historySessions}>
+                      {group.sessions.length} session{group.sessions.length !== 1 ? "s" : ""}
+                      {" · "}
+                      {[...new Set(group.sessions.map((s) => s.student_name.split(" ")[0]))].join(", ")}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text style={styles.historyAmount}>${group.total.toFixed(2)}</Text>
+                    <Text style={styles.historyStatus}>PAID</Text>
+                  </View>
                 </View>
               ))}
             </View>
@@ -289,72 +286,79 @@ export default function ParentPaymentScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#fff" },
+  safe: { flex: 1, backgroundColor: SW.color.surface },
   header: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8,
   },
   backBtn: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
-  headerTitle: { color: PRIMARY, fontSize: 18, fontWeight: "700" },
+  headerTitle: { fontFamily: SW.font.bold, fontSize: 18, color: PRIMARY },
   scroll: { paddingBottom: 48 },
 
-  dueBanner: {
-    backgroundColor: PRIMARY, marginHorizontal: 20, marginTop: 8, marginBottom: 12,
-    borderRadius: 24, padding: 24, flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+  hero: {
+    backgroundColor: SW.color.primaryContainer,
+    marginHorizontal: SW.space.margin, marginTop: 8, marginBottom: 12,
+    borderRadius: SW.radius.xl, padding: SW.space.cardPad + 4,
+    ...SW.shadow(SW.color.primaryContainer, 0.35),
   },
-  dueLabel:  { color: "rgba(255,255,255,0.6)", fontSize: 11, fontWeight: "700", letterSpacing: 1.2, marginBottom: 4 },
-  dueAmount: { color: "#fff", fontSize: 40, fontWeight: "800", lineHeight: 44 },
-  dueSub:    { color: "rgba(255,255,255,0.65)", fontSize: 12, marginTop: 4 },
-  payBtn:    { backgroundColor: "#fff", borderRadius: 20, paddingHorizontal: 18, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 8 },
-  payBtnText:{ color: PRIMARY, fontSize: 14, fontWeight: "700" },
+  heroLabel:  { ...SW.type.labelSm, color: "rgba(255,255,255,0.75)", letterSpacing: 1.6 },
+  heroAmountRow: { flexDirection: "row", alignItems: "flex-start", marginTop: 6 },
+  heroAmount: { fontFamily: SW.font.bold, fontSize: 48, lineHeight: 54, color: "#fff" },
+  heroCents:  { fontFamily: SW.font.bold, fontSize: 18, color: "rgba(255,255,255,0.8)", marginTop: 8 },
+  heroSub:    { ...SW.type.bodyMd, color: "rgba(255,255,255,0.85)", marginTop: 4 },
 
-  stripeNote: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 24, marginBottom: 24 },
-  stripeNoteText: { fontSize: 12, color: "#94a3b8" },
+  stripeNote: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: SW.space.margin + 4, marginBottom: 24 },
+  stripeNoteText: { ...SW.type.bodyMd, fontSize: 12, color: SW.color.muted },
 
-  section: { paddingHorizontal: 20, marginBottom: 28 },
-  sectionTitle: { fontSize: 17, fontWeight: "700", color: "#0f172a", marginBottom: 14 },
+  section: { paddingHorizontal: SW.space.margin, marginBottom: 28 },
+  sectionTitle: { ...SW.type.headlineMd, color: SW.color.onSurface, marginBottom: 14 },
 
-  emptyBox: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    backgroundColor: "#f8fafc", borderRadius: 16,
-    paddingVertical: 16, paddingHorizontal: 16,
-    borderWidth: 1, borderColor: "#e2e8f0", marginBottom: 14,
+  sessionCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: SW.color.card, borderRadius: SW.radius.lg,
+    paddingHorizontal: 16, paddingVertical: 14,
+    ...SW.shadow(SW.color.outline, 0.2),
   },
-  emptyBoxText: { color: "#94a3b8", fontSize: 13, flex: 1 },
-
-  sessionList: { borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 20, overflow: "hidden", marginBottom: 14 },
-  sessionRow:  { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 14, gap: 12 },
-  avatar:      { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
-  avatarText:  { color: PRIMARY, fontSize: 14, fontWeight: "700" },
-  sessionStudent: { fontSize: 14, fontWeight: "700", color: "#0f172a", marginBottom: 2 },
-  sessionSubject: { fontSize: 12, color: "#64748b", marginBottom: 3 },
-  sessionMeta:    { flexDirection: "row", alignItems: "center", gap: 4 },
-  sessionMetaText:{ fontSize: 11, color: "#94a3b8" },
+  avatar:      { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center" },
+  avatarText:  { fontFamily: SW.font.bold, fontSize: 15 },
+  sessionStudent: { ...SW.type.bodyLg, fontFamily: SW.font.bold, fontSize: 15, color: SW.color.onSurface },
+  sessionSubject: { ...SW.type.bodyMd, fontSize: 13, color: SW.color.onSurfaceVariant, marginTop: 1 },
+  sessionMetaText:{ ...SW.type.labelSm, fontFamily: SW.font.medium, color: SW.color.muted, marginTop: 2 },
   priceCol:    { alignItems: "flex-end", gap: 5 },
-  sessionPrice:{ fontSize: 18, fontWeight: "800", color: "#0f172a" },
-  tierBadge:   { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  tierBadgeText:{ fontSize: 10, fontWeight: "700" },
+  sessionPrice:{ fontFamily: SW.font.bold, fontSize: 18, color: SW.color.onSurface },
+  tierBadge:   { borderRadius: SW.radius.full, paddingHorizontal: 9, paddingVertical: 3 },
+  tierBadgeText:{ ...SW.type.labelSm, fontSize: 10 },
   totalRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 14, paddingVertical: 14, backgroundColor: CARD_BG,
-    borderTopWidth: 1, borderTopColor: "#e2e8f0",
+    paddingHorizontal: 16, paddingVertical: 14,
+    backgroundColor: SW.color.lavenderSoft, borderRadius: SW.radius.lg,
   },
-  totalLabel:  { fontSize: 14, fontWeight: "700", color: "#0f172a" },
-  totalAmount: { fontSize: 20, fontWeight: "800", color: PRIMARY },
-  divider: { height: 1, backgroundColor: "#f1f5f9", marginHorizontal: 14 },
+  totalLabel:  { ...SW.type.labelMd, fontSize: 15, color: SW.color.onSurface },
+  totalAmount: { fontFamily: SW.font.bold, fontSize: 20, color: PRIMARY },
 
-  pricingNote:      { borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 16, padding: 14 },
-  pricingNoteTitle: { fontSize: 12, fontWeight: "700", color: "#94a3b8", marginBottom: 10, letterSpacing: 0.5 },
-  pricingGrid: { gap: 8 },
-  pricingRow:  { flexDirection: "row", alignItems: "center", gap: 10 },
-  pricingDot:  { width: 10, height: 10, borderRadius: 5, borderWidth: 1.5 },
-  pricingTier: { flex: 1, fontSize: 13, color: "#334155", fontWeight: "500" },
-  pricingRate: { fontSize: 13, fontWeight: "700" },
+  rateCard: { borderRadius: SW.radius.xl, padding: SW.space.cardPad + 2 },
+  rateIcon: {
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: "center", justifyContent: "center", marginBottom: 14,
+  },
+  rateTier: { ...SW.type.labelMd, fontSize: 15 },
+  rateSub:  { ...SW.type.bodyMd, fontSize: 14, opacity: 0.85, marginBottom: 10 },
+  rateAmountRow: { flexDirection: "row", alignItems: "flex-end", gap: 2 },
+  rateAmount: { fontFamily: SW.font.bold, fontSize: 30, lineHeight: 34 },
+  ratePer:    { ...SW.type.labelSm, marginBottom: 5 },
 
-  historyList: { borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 20, overflow: "hidden" },
-  historyRow:  { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 14, gap: 12 },
-  historyIconWrap: { width: 38, height: 38, borderRadius: 19, backgroundColor: "#ecfdf5", alignItems: "center", justifyContent: "center" },
-  historyWeek:     { fontSize: 13, fontWeight: "600", color: "#0f172a", marginBottom: 2 },
-  historySessions: { fontSize: 11, color: "#94a3b8" },
-  historyAmount:   { fontSize: 15, fontWeight: "800", color: "#10b981" },
+  historyRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: SW.color.card, borderRadius: SW.radius.lg,
+    paddingHorizontal: 16, paddingVertical: 14,
+    ...SW.shadow(SW.color.outline, 0.2),
+  },
+  historyIconWrap: {
+    width: 42, height: 42, borderRadius: 21,
+    backgroundColor: SW.color.mintSoft, alignItems: "center", justifyContent: "center",
+  },
+  historyWeek:     { ...SW.type.bodyMd, fontFamily: SW.font.bold, fontSize: 14, color: SW.color.onSurface },
+  historySessions: { ...SW.type.labelSm, fontFamily: SW.font.medium, color: SW.color.muted, marginTop: 2 },
+  historyAmount:   { fontFamily: SW.font.bold, fontSize: 15, color: SW.color.onSurface },
+  historyStatus:   { ...SW.type.labelSm, fontSize: 10, letterSpacing: 0.8, color: SW.color.onMint, marginTop: 2 },
 });

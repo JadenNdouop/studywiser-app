@@ -1,11 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Linking,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,13 +14,19 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { SWBottomSheet, SWHeader, avatarTint, getInitials as swInitials } from "../../components/sw";
+import { SW, STATUS_COLORS } from "../../constants/theme";
 import { useAuth } from "../../context/auth";
 import { formatFrequency, formatTime } from "../../lib/format";
+import { MOCK_SESSION_NOTES, MOCK_TUTOR_SESSIONS, USE_MOCK } from "../../constants/mockData";
 import { supabase } from "../../lib/supabase";
 
-const PRIMARY = "#014aad";
-const CARD_BG = "#eef2ff";
-const CAL_BG = "#dde3f8";
+const PRIMARY = SW.color.primary;
+const CARD_BG = SW.color.lavenderSoft;
+
+// Week-strip day pill sizing (used for centering the selected day)
+const DAY_ITEM_W = 60;
+const DAY_ITEM_GAP = 8;
 
 type Status = "upcoming" | "pending" | "completed";
 
@@ -79,8 +85,12 @@ function avatarColor(id: string) {
 }
 
 const STATUS_LABEL: Record<Status, string> = { upcoming: "Upcoming", pending: "Pending", completed: "Completed" };
-const STATUS_COLOR: Record<Status, string> = { upcoming: PRIMARY, pending: "#f59e0b", completed: "#10b981" };
-const STATUS_BG:    Record<Status, string> = { upcoming: CARD_BG,  pending: "#fffbeb", completed: "#ecfdf5" };
+const STATUS_COLOR: Record<Status, string> = {
+  upcoming: STATUS_COLORS.upcoming.fg, pending: STATUS_COLORS.pending.fg, completed: STATUS_COLORS.completed.fg,
+};
+const STATUS_BG: Record<Status, string> = {
+  upcoming: STATUS_COLORS.upcoming.bg, pending: STATUS_COLORS.pending.bg, completed: STATUS_COLORS.completed.bg,
+};
 
 export default function TutorScheduleScreen() {
   const { profile } = useAuth();
@@ -94,13 +104,30 @@ export default function TutorScheduleScreen() {
   const [sessions,       setSessions]       = useState<SessionRow[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [linkSession,    setLinkSession]    = useState<SessionRow | null>(null);
+  const [linkOpen,       setLinkOpen]       = useState(false);
   const [linkInput,      setLinkInput]      = useState("");
   const [notesSession,   setNotesSession]   = useState<SessionRow | null>(null);
+  const [notesOpen,      setNotesOpen]      = useState(false);
   const [notesInput,     setNotesInput]     = useState("");
   const [notesLoading,   setNotesLoading]   = useState(false);
 
   // Month label for the strip header
   const monthLabel = monday.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  // Keep the selected day centered in the week strip
+  const stripRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    const idx = WEEK.findIndex((d) => d.date === selectedDate);
+    if (idx < 0) return;
+    const stride = DAY_ITEM_W + DAY_ITEM_GAP;
+    const visibleW = Dimensions.get("window").width - SW.space.margin * 2;
+    const target = idx * stride + DAY_ITEM_W / 2 - visibleW / 2;
+    const t = setTimeout(
+      () => stripRef.current?.scrollTo({ x: Math.max(0, target), animated: true }),
+      60,
+    );
+    return () => clearTimeout(t);
+  }, [selectedDate]);
 
   useFocusEffect(useCallback(() => {
     if (!profile?.id) return;
@@ -109,6 +136,7 @@ export default function TutorScheduleScreen() {
 
   async function loadData() {
     if (sessions.length === 0) setLoading(true);
+    if (USE_MOCK) { setSessions(MOCK_TUTOR_SESSIONS as any); setLoading(false); return; }
     try {
       const weekStart = WEEK[0].fullDate;
       const weekEnd   = WEEK[6].fullDate;
@@ -169,12 +197,12 @@ export default function TutorScheduleScreen() {
   /* ─── Actions (optimistic + Supabase update) ─── */
   async function acceptSession(id: string) {
     setSessions((prev) => prev.map((s) => s.id === id ? { ...s, status: "upcoming" } : s));
-    await supabase.from("sessions").update({ status: "upcoming" }).eq("id", id);
+    if (!USE_MOCK) await supabase.from("sessions").update({ status: "upcoming" }).eq("id", id);
   }
 
   async function declineSession(id: string) {
     setSessions((prev) => prev.filter((s) => s.id !== id));
-    await supabase.from("sessions").update({ status: "cancelled" as any }).eq("id", id);
+    if (!USE_MOCK) await supabase.from("sessions").update({ status: "cancelled" as any }).eq("id", id);
   }
 
   async function saveMeetingLink() {
@@ -182,15 +210,21 @@ export default function TutorScheduleScreen() {
     const url = linkInput.trim();
     if (!url) return;
     setSessions((prev) => prev.map((s) => s.id === linkSession.id ? { ...s, meeting_url: url } : s));
-    setLinkSession(null);
+    setLinkOpen(false);
     setLinkInput("");
-    await supabase.from("sessions").update({ meeting_url: url }).eq("id", linkSession.id);
+    if (!USE_MOCK) await supabase.from("sessions").update({ meeting_url: url }).eq("id", linkSession.id);
   }
 
   async function openNotes(s: SessionRow) {
     setNotesSession(s);
+    setNotesOpen(true);
     setNotesInput("");
     setNotesLoading(true);
+    if (USE_MOCK) {
+      setNotesInput(MOCK_SESSION_NOTES[s.id] ?? "");
+      setNotesLoading(false);
+      return;
+    }
     const { data } = await supabase
       .from("session_notes")
       .select("content")
@@ -203,11 +237,13 @@ export default function TutorScheduleScreen() {
   async function saveNotes() {
     if (!notesSession || !profile?.id) return;
     const content = notesInput.trim();
-    await supabase.from("session_notes").upsert(
-      { session_id: notesSession.id, tutor_id: profile.id, content, updated_at: new Date().toISOString() },
-      { onConflict: "session_id" }
-    );
-    setNotesSession(null);
+    if (!USE_MOCK) {
+      await supabase.from("session_notes").upsert(
+        { session_id: notesSession.id, tutor_id: profile.id, content, updated_at: new Date().toISOString() },
+        { onConflict: "session_id" }
+      );
+    }
+    setNotesOpen(false);
     setNotesInput("");
   }
 
@@ -218,52 +254,62 @@ export default function TutorScheduleScreen() {
         text: "Yes, Cancel", style: "destructive",
         onPress: async () => {
           setSessions((prev) => prev.filter((s) => s.id !== id));
-          await supabase.from("sessions").update({ status: "cancelled" as any }).eq("id", id);
+          if (!USE_MOCK) await supabase.from("sessions").update({ status: "cancelled" as any }).eq("id", id);
         },
       },
     ]);
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      {/* ── Header ── */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Schedule</Text>
-      </View>
-
-      {/* ── Weekly summary ── */}
-      <View style={styles.weekSummary}>
-        <View style={styles.summaryRow}>
-          <View style={[styles.summaryTile, { backgroundColor: CARD_BG }]}>
-            <Text style={styles.summaryTileValue}>{weekSessions.length}</Text>
-            <Text style={styles.summaryTileLabel}>Sessions</Text>
-          </View>
-          <View style={[styles.summaryTile, { backgroundColor: CARD_BG }]}>
-            <Text style={styles.summaryTileValue}>{weekHours % 1 === 0 ? weekHours : weekHours.toFixed(1)}</Text>
-            <Text style={styles.summaryTileLabel}>Hours</Text>
-          </View>
-        </View>
-        <View style={styles.summaryRow}>
-          <View style={[styles.summaryTile, { backgroundColor: "#ecfdf5" }]}>
-            <Text style={[styles.summaryTileValue, { color: "#10b981" }]}>${weekEarnings.toFixed(0)}</Text>
-            <Text style={styles.summaryTileLabel}>This Week</Text>
-          </View>
-          <View style={[styles.summaryTile, { backgroundColor: pendingCount > 0 ? "#fffbeb" : CARD_BG }]}>
-            <Text style={[styles.summaryTileValue, { color: pendingCount > 0 ? "#f59e0b" : PRIMARY }]}>{pendingCount}</Text>
-            <Text style={styles.summaryTileLabel}>Pending</Text>
-          </View>
-        </View>
-        <TouchableOpacity style={styles.todayBtn} onPress={() => setSelectedDate(todayDay)}>
-          <Ionicons name="today-outline" size={14} color={PRIMARY} />
-          <Text style={styles.todayBtnText}>Today</Text>
-        </TouchableOpacity>
-      </View>
-
+    <SafeAreaView style={styles.safe} edges={["left", "right"]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 110 }}>
+        <SWHeader initials={swInitials(profile?.full_name)} />
+
+        {/* ── Heading ── */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>My Schedule</Text>
+          <Text style={styles.headerSub}>Manage your upcoming sessions</Text>
+        </View>
+
+        {/* ── Weekly summary ── */}
+        <View style={styles.weekSummary}>
+          <View style={[styles.summaryTile, styles.summaryTileBig, { backgroundColor: SW.color.lavender }]}>
+            <Text style={[styles.summaryTileLabel, { color: PRIMARY }]}>Sessions</Text>
+            <Text style={[styles.summaryTileValue, { color: PRIMARY }]}>{weekSessions.length}</Text>
+            <Text style={[styles.summaryTileLabel, { color: PRIMARY }]}>This Week</Text>
+          </View>
+          <View style={{ flex: 1, gap: 10 }}>
+            <View style={[styles.summaryTile, styles.summaryTileWide, { backgroundColor: SW.color.mint }]}>
+              <View>
+                <Text style={[styles.summaryTileLabel, { color: SW.color.onMint }]}>Time</Text>
+                <Text style={[styles.summaryTileValue, { color: SW.color.onMint }]}>
+                  {weekHours % 1 === 0 ? weekHours : weekHours.toFixed(1)}h
+                </Text>
+              </View>
+              <Ionicons name="time-outline" size={20} color={SW.color.onMint} />
+            </View>
+            <View style={[styles.summaryTile, styles.summaryTileWide, { backgroundColor: SW.color.coral }]}>
+              <View>
+                <Text style={[styles.summaryTileLabel, { color: SW.color.onCoral }]}>
+                  {pendingCount > 0 ? `Earned · ${pendingCount} pending` : "Earned"}
+                </Text>
+                <Text style={[styles.summaryTileValue, { color: SW.color.onCoral }]}>${weekEarnings.toFixed(0)}</Text>
+              </View>
+              <Ionicons name="card-outline" size={20} color={SW.color.onCoral} />
+            </View>
+          </View>
+        </View>
+
         {/* ── Calendar strip ── */}
         <View style={styles.calSection}>
-          <Text style={styles.monthLabel}>{monthLabel}</Text>
+          <View style={styles.monthRow}>
+            <Text style={styles.monthLabel}>{monthLabel}</Text>
+            <TouchableOpacity onPress={() => setSelectedDate(todayDay)}>
+              <Text style={styles.todayLink}>Today</Text>
+            </TouchableOpacity>
+          </View>
           <ScrollView
+            ref={stripRef}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.weekStrip}
@@ -338,8 +384,9 @@ export default function TutorScheduleScreen() {
                   onAccept={() => acceptSession(s.id)}
                   onDecline={() => declineSession(s.id)}
                   onCancel={() => cancelSession(s.id)}
-                  onSetLink={() => { setLinkSession(s); setLinkInput(s.meeting_url ?? ""); }}
+                  onSetLink={() => { setLinkSession(s); setLinkOpen(true); setLinkInput(s.meeting_url ?? ""); }}
                   onNotes={() => openNotes(s)}
+                  onMessage={() => router.push({ pathname: "/message-detail", params: { name: `${s.student_name}'s Parent` } })}
                 />
               ))}
             </View>
@@ -347,62 +394,54 @@ export default function TutorScheduleScreen() {
         </View>
       </ScrollView>
 
-      {/* ── Session Notes Modal ── */}
-      <Modal visible={!!notesSession} transparent animationType="slide" onRequestClose={() => setNotesSession(null)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setNotesSession(null)} />
-        <View style={styles.modalSheet}>
-          <View style={styles.modalHandle} />
-          <Text style={styles.modalTitle}>Session Notes</Text>
-          <Text style={styles.modalSub}>For {notesSession?.student_name} · {notesSession?.subject}</Text>
-          {notesLoading ? (
-            <ActivityIndicator color={PRIMARY} style={{ marginVertical: 24 }} />
-          ) : (
-            <TextInput
-              style={[styles.modalInput, { height: 140, textAlignVertical: "top" }]}
-              placeholder="Add notes about this session — topics covered, homework assigned, areas to focus on…"
-              placeholderTextColor="#94a3b8"
-              value={notesInput}
-              onChangeText={setNotesInput}
-              multiline
-              autoCorrect={false}
-            />
-          )}
-          <TouchableOpacity
-            style={[styles.modalSaveBtn, (notesLoading || !notesInput.trim()) && { opacity: 0.4 }]}
-            onPress={saveNotes}
-            disabled={notesLoading || !notesInput.trim()}
-          >
-            <Text style={styles.modalSaveBtnText}>Save Notes</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
-
-      {/* ── Add Meet Link Modal ── */}
-      <Modal visible={!!linkSession} transparent animationType="slide" onRequestClose={() => setLinkSession(null)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setLinkSession(null)} />
-        <View style={styles.modalSheet}>
-          <View style={styles.modalHandle} />
-          <Text style={styles.modalTitle}>Google Meet Link</Text>
-          <Text style={styles.modalSub}>Paste the link for {linkSession?.student_name}'s session</Text>
+      {/* ── Session Notes Sheet ── */}
+      <SWBottomSheet visible={notesOpen} onClose={() => setNotesOpen(false)}>
+        <Text style={styles.modalTitle}>Session Notes</Text>
+        <Text style={styles.modalSub}>For {notesSession?.student_name} · {notesSession?.subject}</Text>
+        {notesLoading ? (
+          <ActivityIndicator color={PRIMARY} style={{ marginVertical: 24 }} />
+        ) : (
           <TextInput
-            style={styles.modalInput}
-            placeholder="https://meet.google.com/xxx-xxxx-xxx"
+            style={[styles.modalInput, { height: 140, textAlignVertical: "top" }]}
+            placeholder="Add notes about this session — topics covered, homework assigned, areas to focus on…"
             placeholderTextColor="#94a3b8"
-            value={linkInput}
-            onChangeText={setLinkInput}
-            autoCapitalize="none"
+            value={notesInput}
+            onChangeText={setNotesInput}
+            multiline
             autoCorrect={false}
-            keyboardType="url"
           />
-          <TouchableOpacity
-            style={[styles.modalSaveBtn, !linkInput.trim() && { opacity: 0.4 }]}
-            onPress={saveMeetingLink}
-            disabled={!linkInput.trim()}
-          >
-            <Text style={styles.modalSaveBtnText}>Save Link</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
+        )}
+        <TouchableOpacity
+          style={[styles.modalSaveBtn, (notesLoading || !notesInput.trim()) && { opacity: 0.4 }]}
+          onPress={saveNotes}
+          disabled={notesLoading || !notesInput.trim()}
+        >
+          <Text style={styles.modalSaveBtnText}>Save Notes</Text>
+        </TouchableOpacity>
+      </SWBottomSheet>
+
+      {/* ── Add Meet Link Sheet ── */}
+      <SWBottomSheet visible={linkOpen} onClose={() => setLinkOpen(false)}>
+        <Text style={styles.modalTitle}>Google Meet Link</Text>
+        <Text style={styles.modalSub}>Paste the link for {linkSession?.student_name}&apos;s session</Text>
+        <TextInput
+          style={styles.modalInput}
+          placeholder="https://meet.google.com/xxx-xxxx-xxx"
+          placeholderTextColor="#94a3b8"
+          value={linkInput}
+          onChangeText={setLinkInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+        />
+        <TouchableOpacity
+          style={[styles.modalSaveBtn, !linkInput.trim() && { opacity: 0.4 }]}
+          onPress={saveMeetingLink}
+          disabled={!linkInput.trim()}
+        >
+          <Text style={styles.modalSaveBtnText}>Save Link</Text>
+        </TouchableOpacity>
+      </SWBottomSheet>
     </SafeAreaView>
   );
 }
@@ -414,6 +453,7 @@ function SessionCard({
   onCancel,
   onSetLink,
   onNotes,
+  onMessage,
 }: {
   session: SessionRow;
   onAccept: () => void;
@@ -421,8 +461,9 @@ function SessionCard({
   onCancel: () => void;
   onSetLink: () => void;
   onNotes: () => void;
+  onMessage: () => void;
 }) {
-  const color = avatarColor(s.id);
+  const tint = avatarTint(s.id);
 
   return (
     <View style={card.card}>
@@ -439,8 +480,8 @@ function SessionCard({
 
       {/* Top */}
       <View style={card.top}>
-        <View style={[card.avatar, { backgroundColor: color }]}>
-          <Text style={card.avatarText}>{getInitials(s.student_name)}</Text>
+        <View style={[card.avatar, { backgroundColor: tint.bg }]}>
+          <Text style={[card.avatarText, { color: tint.fg }]}>{getInitials(s.student_name)}</Text>
         </View>
         <View style={{ flex: 1 }}>
           <Text style={card.name}>{s.student_name}</Text>
@@ -472,36 +513,44 @@ function SessionCard({
             </TouchableOpacity>
           </>
         ) : s.status === "completed" ? (
-          <TouchableOpacity style={card.notesBtn} onPress={onNotes}>
-            <Ionicons name="document-text-outline" size={15} color={PRIMARY} />
-            <Text style={card.notesBtnText}>Notes</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity style={[card.notesBtn, card.leftPush]} onPress={onNotes}>
+              <Ionicons name="document-text-outline" size={15} color={PRIMARY} />
+              <Text style={card.notesBtnText}>Notes</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={card.msgBtn} onPress={onMessage}>
+              <Ionicons name="chatbubble-ellipses-outline" size={18} color={PRIMARY} />
+            </TouchableOpacity>
+          </>
         ) : (
           <>
-            <TouchableOpacity style={card.cancelBtn} onPress={onCancel}>
+            {/* Cancel (far left) → Edit → Message → Join */}
+            <TouchableOpacity style={[card.cancelBtn, card.leftPush]} onPress={onCancel}>
               <Ionicons name="close-circle-outline" size={15} color="#ef4444" />
               <Text style={card.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
-            {s.format === "Virtual" && (
-              s.meeting_url ? (
-                <>
-                  <TouchableOpacity style={card.linkBtn} onPress={onSetLink}>
-                    <Ionicons name="pencil-outline" size={13} color={PRIMARY} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={card.joinBtn}
-                    onPress={() => Linking.openURL(s.meeting_url!)}
-                  >
-                    <Ionicons name="videocam-outline" size={15} color="#fff" />
-                    <Text style={card.joinBtnText}>Join</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <TouchableOpacity style={card.addLinkBtn} onPress={onSetLink}>
-                  <Ionicons name="link-outline" size={14} color={PRIMARY} />
-                  <Text style={card.addLinkBtnText}>Add Meet Link</Text>
-                </TouchableOpacity>
-              )
+            {s.format === "Virtual" && s.meeting_url && (
+              <TouchableOpacity style={card.linkBtn} onPress={onSetLink}>
+                <Ionicons name="pencil-outline" size={13} color={PRIMARY} />
+              </TouchableOpacity>
+            )}
+            {s.format === "Virtual" && !s.meeting_url && (
+              <TouchableOpacity style={card.addLinkBtn} onPress={onSetLink}>
+                <Ionicons name="link-outline" size={14} color={PRIMARY} />
+                <Text style={card.addLinkBtnText}>Add Meet Link</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={card.msgBtn} onPress={onMessage}>
+              <Ionicons name="chatbubble-ellipses-outline" size={18} color={PRIMARY} />
+            </TouchableOpacity>
+            {s.format === "Virtual" && s.meeting_url && (
+              <TouchableOpacity
+                style={card.joinBtn}
+                onPress={() => Linking.openURL(s.meeting_url!)}
+              >
+                <Ionicons name="videocam-outline" size={15} color="#fff" />
+                <Text style={card.joinBtnText}>Join</Text>
+              </TouchableOpacity>
             )}
           </>
         )}
@@ -511,146 +560,163 @@ function SessionCard({
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#fff" },
-  header: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14 },
-  headerTitle: { color: "#0f172a", fontSize: 26, fontWeight: "800" },
+  safe: { flex: 1, backgroundColor: SW.color.surface },
+  header: { paddingHorizontal: SW.space.margin, paddingBottom: 16 },
+  headerTitle: { ...SW.type.headlineLg, color: SW.color.onSurface },
+  headerSub: { ...SW.type.bodyMd, color: SW.color.muted, marginTop: 4 },
 
   weekSummary: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    gap: 10,
-  },
-  summaryRow: {
     flexDirection: "row",
+    marginHorizontal: SW.space.margin,
+    marginBottom: 18,
     gap: 10,
   },
   summaryTile: {
-    flex: 1,
-    borderRadius: 18,
-    paddingVertical: 20,
-    alignItems: "center",
-    gap: 4,
+    borderRadius: SW.radius.lg,
+    padding: 16,
   },
-  summaryTileValue: { fontSize: 22, fontWeight: "800", color: PRIMARY },
-  summaryTileLabel: { fontSize: 11, color: "#94a3b8", fontWeight: "500" },
-  todayBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-    backgroundColor: CARD_BG, borderRadius: 14,
+  summaryTileBig: {
+    flex: 1,
+    justifyContent: "center",
+    gap: 2,
+    ...SW.shadow(SW.color.lavender, 0.5),
+  },
+  summaryTileWide: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 12,
   },
-  todayBtnText: { color: PRIMARY, fontSize: 14, fontWeight: "600" },
+  summaryTileValue: { fontFamily: SW.font.bold, fontSize: 24, lineHeight: 30 },
+  summaryTileLabel: { ...SW.type.labelSm, fontFamily: SW.font.semibold },
 
   calSection: {
-    backgroundColor: CAL_BG,
-    borderRadius: 24,
-    marginHorizontal: 16,
-    paddingVertical: 14,
+    marginHorizontal: SW.space.margin,
     marginBottom: 18,
   },
-  monthLabel: {
-    color: "#1e293b", fontSize: 14, fontWeight: "700",
-    textAlign: "center", marginBottom: 10,
+  monthRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    marginBottom: 12,
   },
-  weekStrip: { paddingHorizontal: 8, gap: 2 },
+  monthLabel: { ...SW.type.headlineMd, fontSize: 18, color: SW.color.onSurface },
+  todayLink: { ...SW.type.labelMd, color: PRIMARY },
+  weekStrip: { gap: DAY_ITEM_GAP, paddingVertical: 6 },
   dayPill: {
-    alignItems: "center", paddingVertical: 8, paddingHorizontal: 10,
-    borderRadius: 14, minWidth: 48, gap: 2,
+    alignItems: "center", paddingVertical: 12, paddingHorizontal: 8,
+    borderRadius: SW.radius.md, width: DAY_ITEM_W, gap: 2,
+    backgroundColor: SW.color.card,
+    borderWidth: 1,
+    borderColor: SW.color.surfaceHigh,
   },
-  dayPillActive: { backgroundColor: PRIMARY },
-  dayNum: { fontSize: 17, fontWeight: "800", color: "#1e293b" },
+  dayPillActive: {
+    backgroundColor: PRIMARY,
+    borderColor: PRIMARY,
+  },
+  dayLabel: { ...SW.type.labelSm, fontSize: 11, fontFamily: SW.font.semibold, color: SW.color.muted },
+  dayLabelActive: { color: "rgba(255,255,255,0.85)" },
+  dayNum: { fontFamily: SW.font.bold, fontSize: 20, color: SW.color.onSurface },
   dayNumActive: { color: "#fff" },
-  dayLabel: { fontSize: 10, fontWeight: "600", color: "#64748b" },
-  dayLabelActive: { color: "rgba(255,255,255,0.75)" },
   dotsRow: { flexDirection: "row", gap: 3, marginTop: 2, height: 6, alignItems: "center" },
   dot: { width: 5, height: 5, borderRadius: 3 },
-  dotUpcoming: { backgroundColor: PRIMARY },
-  dotPending: { backgroundColor: "#f59e0b" },
-  dotActive: { backgroundColor: "rgba(255,255,255,0.8)" },
+  dotUpcoming: { backgroundColor: SW.color.onMint },
+  dotPending: { backgroundColor: SW.color.onCoral },
+  dotActive: { backgroundColor: "rgba(255,255,255,0.9)" },
   todayUnderline: { width: 18, height: 2, borderRadius: 1, backgroundColor: PRIMARY, marginTop: 1 },
 
   dayHeader: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 20, marginBottom: 10,
+    paddingHorizontal: SW.space.margin, marginBottom: 12,
   },
-  dayTitle: { fontSize: 16, fontWeight: "700", color: "#0f172a" },
-  dayCount: { fontSize: 13, fontWeight: "400", color: "#94a3b8" },
-  dayEarnings: { flexDirection: "row", alignItems: "center" },
-  dayEarningsLabel: { fontSize: 13, color: "#94a3b8" },
-  dayEarningsValue: { fontSize: 13, fontWeight: "700", color: "#10b981" },
+  dayTitle: { ...SW.type.headlineMd, color: SW.color.onSurface },
+  dayCount: { ...SW.type.bodyMd, fontSize: 13, color: SW.color.muted },
+  dayEarnings: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: SW.color.mintSoft, borderRadius: SW.radius.full,
+    paddingHorizontal: 12, paddingVertical: 5,
+  },
+  dayEarningsLabel: { ...SW.type.labelSm, fontFamily: SW.font.medium, color: SW.color.onMint },
+  dayEarningsValue: { ...SW.type.labelSm, color: SW.color.onMint },
 
-  listSection: { paddingHorizontal: 16 },
-  cardList: { gap: 14 },
+  listSection: { paddingHorizontal: SW.space.margin },
+  cardList: { gap: 16 },
 
   empty: { alignItems: "center", paddingVertical: 48, gap: 10 },
-  emptyTitle: { color: "#94a3b8", fontSize: 16, fontWeight: "600" },
-  emptyBody: { color: "#cbd5e1", fontSize: 13, textAlign: "center", maxWidth: 220 },
+  emptyTitle: { ...SW.type.bodyLg, fontFamily: SW.font.bold, color: SW.color.muted },
+  emptyBody: { ...SW.type.bodyMd, fontSize: 13, color: SW.color.outline, textAlign: "center", maxWidth: 220 },
 
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)" },
+  modalRoot: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)", justifyContent: "flex-end" },
   modalSheet: {
-    backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 24, gap: 12,
+    backgroundColor: SW.color.card, borderTopLeftRadius: SW.radius.xl, borderTopRightRadius: SW.radius.xl,
+    padding: 24, gap: 12, overflow: "hidden",
   },
-  modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "#e2e8f0", alignSelf: "center", marginBottom: 4 },
-  modalTitle: { fontSize: 18, fontWeight: "800", color: "#0f172a" },
-  modalSub: { fontSize: 13, color: "#64748b" },
+  modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: SW.color.outline, alignSelf: "center", marginBottom: 4 },
+  modalTitle: { ...SW.type.headlineMd, color: SW.color.onSurface },
+  modalSub: { ...SW.type.bodyMd, fontSize: 13, color: SW.color.muted },
   modalInput: {
-    borderWidth: 1.5, borderColor: "#e2e8f0", borderRadius: 14,
-    paddingHorizontal: 16, paddingVertical: 13,
-    fontSize: 14, color: "#0f172a", backgroundColor: "#f8fafc",
+    borderRadius: SW.radius.md,
+    paddingHorizontal: 16, paddingVertical: 14,
+    minHeight: 52,
+    fontFamily: SW.font.medium, fontSize: 15,
+    color: SW.color.onSurface, backgroundColor: SW.color.inputBg,
+    textAlignVertical: "center",
   },
   modalSaveBtn: {
-    backgroundColor: PRIMARY, borderRadius: 14,
-    paddingVertical: 14, alignItems: "center", marginTop: 4,
+    backgroundColor: PRIMARY, borderRadius: SW.radius.full,
+    paddingVertical: 15, alignItems: "center", marginTop: 4,
   },
-  modalSaveBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  modalSaveBtnText: { fontFamily: SW.font.bold, fontSize: 15, color: "#fff" },
 });
 
 const card = StyleSheet.create({
   card: {
     flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
+    backgroundColor: SW.color.card,
+    borderRadius: SW.radius.lg,
     overflow: "hidden",
+    ...SW.shadow(SW.color.outline, 0.22),
   },
   topStrip: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8,
-    borderBottomWidth: 1, borderBottomColor: "#f1f5f9",
+    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8,
   },
   timeChip: {
     flexDirection: "row", alignItems: "center", gap: 5,
-    backgroundColor: CARD_BG, borderRadius: 20,
+    backgroundColor: CARD_BG, borderRadius: SW.radius.full,
     paddingHorizontal: 11, paddingVertical: 5,
   },
-  timeChipText: { color: PRIMARY, fontSize: 12, fontWeight: "700" },
-  top: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12, gap: 12 },
-  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: PRIMARY, fontSize: 15, fontWeight: "700" },
-  name: { color: "#0f172a", fontSize: 15, fontWeight: "700", marginBottom: 2 },
-  subject: { color: "#475569", fontSize: 12, marginBottom: 4 },
+  timeChipText: { ...SW.type.labelSm, color: PRIMARY },
+  top: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 16, paddingTop: 6, paddingBottom: 14, gap: 12 },
+  avatar: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center" },
+  avatarText: { fontFamily: SW.font.bold, fontSize: 15 },
+  name: { ...SW.type.bodyLg, fontFamily: SW.font.bold, fontSize: 16, color: SW.color.onSurface },
+  subject: { ...SW.type.bodyMd, fontSize: 13, color: SW.color.onSurfaceVariant, marginTop: 1, marginBottom: 4 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 5 },
-  metaText: { color: "#64748b", fontSize: 12 },
+  metaText: { ...SW.type.labelSm, fontFamily: SW.font.medium, color: SW.color.muted },
   formatDot: { width: 6, height: 6, borderRadius: 3 },
-  statusBadge: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20 },
-  statusText: { fontSize: 10, fontWeight: "700" },
-  earningsText: { fontSize: 15, fontWeight: "800", color: "#10b981" },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: SW.radius.full },
+  statusText: { ...SW.type.labelSm, fontSize: 10, letterSpacing: 0.6 },
+  earningsText: { fontFamily: SW.font.bold, fontSize: 16, color: SW.color.onMint },
+  msgBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: SW.color.lavenderSoft,
+    alignItems: "center", justifyContent: "center",
+  },
 
-  divider: { height: 1, backgroundColor: "#f1f5f9" },
-  actions: { flexDirection: "row", paddingHorizontal: 14, paddingVertical: 10, gap: 8, justifyContent: "flex-end" },
+  divider: { height: 1, backgroundColor: SW.color.surfaceLow },
+  actions: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 12, gap: 8, justifyContent: "flex-end" },
+  leftPush: { marginRight: "auto" },
 
-  joinBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: PRIMARY, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
-  joinBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
-  acceptBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#10b981", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
-  acceptBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
-  declineBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#fff1f1", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: "#fecaca" },
-  declineBtnText: { color: "#ef4444", fontSize: 13, fontWeight: "600" },
-  cancelBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#fff1f1", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: "#fecaca" },
-  cancelBtnText: { color: "#ef4444", fontSize: 13, fontWeight: "600" },
-  addLinkBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: CARD_BG, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
-  addLinkBtnText: { color: PRIMARY, fontSize: 13, fontWeight: "600" },
-  linkBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: CARD_BG, alignItems: "center", justifyContent: "center" },
-  notesBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: CARD_BG, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
-  notesBtnText: { color: PRIMARY, fontSize: 13, fontWeight: "600" },
+  joinBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: PRIMARY, borderRadius: SW.radius.full, paddingHorizontal: 18, paddingVertical: 10 },
+  joinBtnText: { fontFamily: SW.font.bold, fontSize: 13, color: "#fff" },
+  acceptBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: SW.color.success, borderRadius: SW.radius.full, paddingHorizontal: 18, paddingVertical: 10 },
+  acceptBtnText: { fontFamily: SW.font.bold, fontSize: 13, color: "#fff" },
+  declineBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "transparent", borderRadius: SW.radius.full, paddingHorizontal: 16, paddingVertical: 9, borderWidth: 1.5, borderColor: SW.color.outline },
+  declineBtnText: { ...SW.type.labelMd, fontSize: 13, color: SW.color.onSurfaceVariant },
+  cancelBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: SW.color.errorSoft, borderRadius: SW.radius.full, paddingHorizontal: 16, paddingVertical: 9 },
+  cancelBtnText: { ...SW.type.labelMd, fontSize: 13, color: SW.color.error },
+  addLinkBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: CARD_BG, borderRadius: SW.radius.full, paddingHorizontal: 16, paddingVertical: 9 },
+  addLinkBtnText: { ...SW.type.labelMd, fontSize: 13, color: PRIMARY },
+  linkBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: CARD_BG, alignItems: "center", justifyContent: "center" },
+  notesBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: CARD_BG, borderRadius: SW.radius.full, paddingHorizontal: 16, paddingVertical: 9 },
+  notesBtnText: { ...SW.type.labelMd, fontSize: 13, color: PRIMARY },
 });

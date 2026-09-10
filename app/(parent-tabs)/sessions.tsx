@@ -1,14 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Alert, Linking, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { SWBottomSheet, SWButton, SWEmptyState, SWHeader, SWStatusBadge, getInitials, subjectTint } from "../../components/sw";
+import { MOCK_PARENT_SESSIONS, MOCK_SESSION_NOTES, USE_MOCK } from "../../constants/mockData";
+import { SW } from "../../constants/theme";
 import { useAuth } from "../../context/auth";
 import { formatFrequency, formatTime } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
-
-const PRIMARY = "#014aad";
-const CARD_BG = "#eef2ff";
 
 type Status = "upcoming" | "pending" | "completed" | "cancelled";
 
@@ -27,33 +27,8 @@ type SessionRow = {
   meeting_url: string | null;
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  upcoming:  PRIMARY,
-  pending:   "#f59e0b",
-  completed: "#10b981",
-  cancelled: "#94a3b8",
-};
-const STATUS_BG: Record<string, string> = {
-  upcoming:  CARD_BG,
-  pending:   "#fffbeb",
-  completed: "#ecfdf5",
-  cancelled: "#f1f5f9",
-};
-
 type FilterTab = "All" | "Upcoming" | "Completed";
 const FILTER_TABS: FilterTab[] = ["All", "Upcoming", "Completed"];
-
-const AVATAR_COLORS = ["#c7d2fe","#fde8d8","#d1fae5","#fef9c3","#fee2e2","#ddd6fe"];
-function avatarColor(id: string) {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
-function getInitials(name: string): string {
-  const parts = name.trim().split(" ");
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
 
 function formatDateLabel(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
@@ -69,6 +44,7 @@ export default function ParentSessionsScreen() {
   const { profile } = useAuth();
   const [sessions,     setSessions]     = useState<SessionRow[]>([]);
   const [activeFilter, setActiveFilter] = useState<FilterTab>("All");
+  const [notesOpen,    setNotesOpen]    = useState(false);
   const [notesModal,   setNotesModal]   = useState<{
     sessionId: string;
     tutor_name: string;
@@ -81,6 +57,7 @@ export default function ParentSessionsScreen() {
   }, [profile?.id]));
 
   async function loadSessions() {
+    if (USE_MOCK) { setSessions(MOCK_PARENT_SESSIONS as any); return; }
     const userId = profile?.id ?? (await supabase.auth.getUser()).data.user?.id;
     if (!userId) return;
     const { data } = await supabase
@@ -114,7 +91,12 @@ export default function ParentSessionsScreen() {
   }
 
   async function openNotes(sessionId: string, tutor_name: string) {
+    setNotesOpen(true);
     setNotesModal({ sessionId, tutor_name, content: null, loading: true });
+    if (USE_MOCK) {
+      setNotesModal({ sessionId, tutor_name, content: MOCK_SESSION_NOTES[sessionId] ?? null, loading: false });
+      return;
+    }
     const { data } = await supabase
       .from("session_notes")
       .select("content")
@@ -141,10 +123,19 @@ export default function ParentSessionsScreen() {
     return s.status === activeFilter.toLowerCase();
   });
 
+  const upcomingCount = sessions.filter((s) => s.status === "upcoming").length;
+
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Sessions</Text>
+    <SafeAreaView style={styles.safe} edges={["left", "right"]}>
+      <SWHeader initials={getInitials(profile?.full_name)} />
+
+      <View style={styles.headingWrap}>
+        <Text style={styles.heading}>My Sessions</Text>
+        <Text style={styles.subheading}>
+          {upcomingCount > 0
+            ? `You have ${upcomingCount} learning adventure${upcomingCount !== 1 ? "s" : ""} scheduled!`
+            : "Manage your learning journey and upcoming meetings."}
+        </Text>
       </View>
 
       <View style={styles.filterRow}>
@@ -164,94 +155,108 @@ export default function ParentSessionsScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {filtered.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="calendar-outline" size={52} color="#cbd5e1" />
-            <Text style={styles.emptyTitle}>No sessions here</Text>
-            <Text style={styles.emptyBody}>
-              {activeFilter === "All"
+          <SWEmptyState
+            icon="calendar-outline"
+            title="No sessions here"
+            subtitle={
+              activeFilter === "All"
                 ? "You don't have any sessions yet."
-                : `No ${activeFilter.toLowerCase()} sessions to show.`}
-            </Text>
-          </View>
+                : `No ${activeFilter.toLowerCase()} sessions to show.`
+            }
+            style={{ marginTop: 40 }}
+          />
         ) : (
           filtered.map((s) => {
-            const color = avatarColor(s.id);
+            const tint = subjectTint(s.subject);
             const isPending = s.status === "pending";
             const tutorLabel = isPending ? "Match Pending" : s.tutor_name;
-            const tutorInitials = isPending ? "?" : getInitials(s.tutor_name);
 
             return (
-              <View key={s.id} style={styles.card}>
-                {/* Time strip */}
+              <View key={s.id} style={[styles.card, SW.shadow(tint.fg, 0.14)]}>
                 <View style={styles.cardTopRow}>
-                  <View style={styles.timeChip}>
-                    <Ionicons name="time-outline" size={12} color={PRIMARY} />
-                    <Text style={styles.timeChipText}>
-                      {formatDateLabel(s.session_date)} · {formatTime(s.session_time)} · {s.duration} min
-                    </Text>
-                  </View>
-                  <View style={[styles.statusBadge, { backgroundColor: STATUS_BG[s.status] }]}>
-                    <Text style={[styles.statusText, { color: STATUS_COLOR[s.status] }]}>
-                      {s.status.charAt(0).toUpperCase() + s.status.slice(1)}
-                    </Text>
+                  <SWStatusBadge status={s.status} />
+                  <View style={[styles.subjectIcon, { backgroundColor: tint.bg }]}>
+                    <Ionicons name={tint.icon as any} size={18} color={tint.fg} />
                   </View>
                 </View>
 
-                {/* Body */}
-                <View style={styles.cardBody}>
-                  <View style={[styles.avatar, { backgroundColor: color }]}>
-                    <Text style={styles.avatarText}>{getInitials(s.student_name)}</Text>
+                <Text style={styles.cardTitle}>{s.subject}</Text>
+
+                <View style={styles.withRow}>
+                  <Text style={styles.withLabel}>with</Text>
+                  <View style={styles.personChip}>
+                    <Text style={styles.personChipText}>{tutorLabel}</Text>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.studentName}>{s.student_name}</Text>
-                    <Text style={styles.subjectText}>{s.subject}</Text>
-                    <View style={styles.metaRow}>
-                      <View style={[styles.formatDot, { backgroundColor: s.format === "Virtual" ? "#3b82f6" : "#10b981" }]} />
-                      <Text style={styles.metaText}>
-                        {s.format}{s.frequency && s.frequency !== "One-time" ? `, ${formatFrequency(s.frequency)}` : ""}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.tutorBadge}>
-                    <View style={[styles.tutorAvatar, isPending && { backgroundColor: "#f1f5f9" }]}>
-                      <Text style={[styles.tutorAvatarText, isPending && { color: "#94a3b8" }]}>{tutorInitials}</Text>
-                    </View>
-                    <Text style={styles.tutorName} numberOfLines={2}>{tutorLabel}</Text>
+                  <Text style={styles.withLabel}>for</Text>
+                  <View style={styles.personChip}>
+                    <Text style={styles.personChipText}>{s.student_name.split(" ")[0]}</Text>
                   </View>
                 </View>
 
-                {/* Actions */}
+                <View style={styles.metaRow}>
+                  <Ionicons name="calendar-outline" size={15} color={SW.color.onSurfaceVariant} />
+                  <Text style={styles.metaText}>{formatDateLabel(s.session_date)}</Text>
+                  <Ionicons name="time-outline" size={15} color={SW.color.onSurfaceVariant} style={{ marginLeft: 10 }} />
+                  <Text style={styles.metaText}>{formatTime(s.session_time)} · {s.duration} min</Text>
+                </View>
+                <View style={styles.metaRow}>
+                  <Ionicons
+                    name={s.format === "Virtual" ? "videocam-outline" : "location-outline"}
+                    size={15}
+                    color={SW.color.onSurfaceVariant}
+                  />
+                  <Text style={styles.metaText}>
+                    {s.format}
+                    {s.frequency && s.frequency !== "One-time" ? ` · ${formatFrequency(s.frequency)}` : ""}
+                  </Text>
+                </View>
+
                 {(s.status === "upcoming" || s.status === "completed") && (
-                  <>
-                    <View style={styles.cardDivider} />
-                    <View style={styles.cardActions}>
-                      {s.status === "upcoming" && (
-                        <>
-                          <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancel(s.id)}>
-                            <Text style={styles.cancelBtnText}>Cancel</Text>
+                  <View style={styles.actionRow}>
+                    {s.status === "upcoming" && (
+                      <>
+                        {s.format === "Virtual" && s.meeting_url ? (
+                          <SWButton
+                            label="Join Session"
+                            icon="videocam-outline"
+                            onPress={() => Linking.openURL(s.meeting_url!)}
+                            style={{ flex: 1, paddingVertical: 13 }}
+                            textStyle={{ fontSize: 15 }}
+                          />
+                        ) : (
+                          <View style={{ flex: 1 }} />
+                        )}
+                        {!isPending && (
+                          <TouchableOpacity
+                            style={styles.msgCircle}
+                            onPress={() => router.push({ pathname: "/message-detail", params: { name: s.tutor_name } })}
+                          >
+                            <Ionicons name="chatbubble-ellipses-outline" size={19} color={SW.color.primary} />
                           </TouchableOpacity>
-                          {s.format === "Virtual" && s.meeting_url && (
-                            <TouchableOpacity
-                              style={styles.joinBtn}
-                              onPress={() => Linking.openURL(s.meeting_url!)}
-                            >
-                              <Ionicons name="videocam-outline" size={15} color="#fff" />
-                              <Text style={styles.joinBtnText}>Join</Text>
-                            </TouchableOpacity>
-                          )}
-                        </>
-                      )}
-                      {s.status === "completed" && (
-                        <TouchableOpacity
-                          style={styles.notesBtn}
-                          onPress={() => openNotes(s.id, s.tutor_name)}
-                        >
-                          <Ionicons name="document-text-outline" size={15} color={PRIMARY} />
-                          <Text style={styles.notesBtnText}>View Notes</Text>
+                        )}
+                        <TouchableOpacity style={styles.cancelCircle} onPress={() => handleCancel(s.id)}>
+                          <Ionicons name="close" size={20} color={SW.color.onSurfaceVariant} />
                         </TouchableOpacity>
-                      )}
-                    </View>
-                  </>
+                      </>
+                    )}
+                    {s.status === "completed" && (
+                      <>
+                        <SWButton
+                          label="View Notes"
+                          variant="outline"
+                          onPress={() => openNotes(s.id, s.tutor_name)}
+                          style={{ flex: 1, paddingVertical: 12 }}
+                          textStyle={{ fontSize: 15 }}
+                        />
+                        <TouchableOpacity
+                          style={styles.msgCircle}
+                          onPress={() => router.push({ pathname: "/message-detail", params: { name: s.tutor_name } })}
+                        >
+                          <Ionicons name="chatbubble-ellipses-outline" size={19} color={SW.color.primary} />
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
                 )}
               </View>
             );
@@ -259,116 +264,111 @@ export default function ParentSessionsScreen() {
         )}
       </ScrollView>
 
-      {/* ── Session Notes Modal ── */}
-      <Modal
-        visible={!!notesModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setNotesModal(null)}
-      >
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setNotesModal(null)} />
-        <View style={styles.notesSheet}>
-          <View style={styles.notesHandle} />
-          <Text style={styles.notesTitle}>Session Notes</Text>
-          <Text style={styles.notesSub}>From {notesModal?.tutor_name}</Text>
-          {notesModal?.loading ? (
-            <ActivityIndicator color={PRIMARY} style={{ marginVertical: 32 }} />
-          ) : notesModal?.content ? (
-            <ScrollView style={styles.notesScrollArea} showsVerticalScrollIndicator={false}>
-              <Text style={styles.notesContent}>{notesModal.content}</Text>
-            </ScrollView>
-          ) : (
-            <View style={styles.notesEmpty}>
-              <Ionicons name="document-outline" size={44} color="#cbd5e1" />
-              <Text style={styles.notesEmptyTitle}>No notes yet</Text>
-              <Text style={styles.notesEmptyBody}>Your tutor hasn't added notes for this session yet.</Text>
-            </View>
-          )}
-          <TouchableOpacity style={styles.notesDoneBtn} onPress={() => setNotesModal(null)}>
-            <Text style={styles.notesDoneBtnText}>Done</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
+      {/* ── Session Notes Sheet ── */}
+      <SWBottomSheet visible={notesOpen} onClose={() => setNotesOpen(false)}>
+        <Text style={styles.notesTitle}>Session Notes</Text>
+        <Text style={styles.notesSub}>From {notesModal?.tutor_name}</Text>
+        {notesModal?.loading ? (
+          <ActivityIndicator color={SW.color.primary} style={{ marginVertical: 32 }} />
+        ) : notesModal?.content ? (
+          <ScrollView style={styles.notesScrollArea} showsVerticalScrollIndicator={false}>
+            <Text style={styles.notesContent}>{notesModal.content}</Text>
+          </ScrollView>
+        ) : (
+          <SWEmptyState
+            icon="document-outline"
+            title="No notes yet"
+            subtitle="Your tutor hasn't added notes for this session yet."
+          />
+        )}
+        <SWButton label="Done" onPress={() => setNotesOpen(false)} style={{ marginTop: 8 }} />
+      </SWBottomSheet>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#fff" },
+  safe: { flex: 1, backgroundColor: SW.color.surface },
 
-  header: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12 },
-  headerTitle: { fontSize: 22, fontWeight: "800", color: "#0f172a" },
+  headingWrap: { paddingHorizontal: SW.space.margin, marginBottom: 16 },
+  heading: { ...SW.type.headlineLg, color: SW.color.onSurface },
+  subheading: { ...SW.type.bodyMd, color: SW.color.muted, marginTop: 4 },
 
-  filterRow: { flexDirection: "row", paddingHorizontal: 20, gap: 8, marginBottom: 12 },
-  filterChip: { flex: 1, alignItems: "center", paddingVertical: 10, borderRadius: 20, backgroundColor: CARD_BG },
-  filterChipActive: { backgroundColor: PRIMARY },
-  filterChipText: { color: "#64748b", fontSize: 13, fontWeight: "600" },
-  filterChipTextActive: { color: "#fff" },
+  filterRow: {
+    flexDirection: "row",
+    marginHorizontal: SW.space.margin,
+    marginBottom: 16,
+    backgroundColor: SW.color.surfaceContainer,
+    borderRadius: SW.radius.full,
+    padding: 4,
+    gap: 4,
+  },
+  filterChip: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 10,
+    borderRadius: SW.radius.full,
+  },
+  filterChipActive: { backgroundColor: SW.color.mint },
+  filterChipText: { ...SW.type.labelMd, color: SW.color.onSurfaceVariant },
+  filterChipTextActive: { color: SW.color.onMint },
 
-  scroll: { paddingHorizontal: 20, paddingBottom: 110, gap: 12 },
+  scroll: { paddingHorizontal: SW.space.margin, paddingBottom: 130, gap: 16 },
 
-  card: { borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 18, overflow: "hidden" },
+  card: {
+    backgroundColor: SW.color.card,
+    borderRadius: SW.radius.lg,
+    padding: SW.space.cardPad,
+  },
   cardTopRow: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8,
-    borderBottomWidth: 1, borderBottomColor: "#f1f5f9",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
   },
-  timeChip: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    backgroundColor: CARD_BG, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
-  },
-  timeChipText: { color: PRIMARY, fontSize: 11, fontWeight: "600" },
-  statusBadge:  { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20 },
-  statusText:   { fontSize: 10, fontWeight: "700" },
-
-  cardBody: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 14, paddingVertical: 14, gap: 12,
-  },
-  avatar:      { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  avatarText:  { color: PRIMARY, fontSize: 15, fontWeight: "700" },
-  studentName: { fontSize: 14, fontWeight: "700", color: "#0f172a", marginBottom: 2 },
-  subjectText: { fontSize: 12, color: "#475569", marginBottom: 4 },
-  metaRow:     { flexDirection: "row", alignItems: "center", gap: 5 },
-  formatDot:   { width: 6, height: 6, borderRadius: 3 },
-  metaText:    { fontSize: 11, color: "#64748b" },
-
-  sessionPrice: { fontSize: 16, fontWeight: "800", color: "#0f172a" },
-  tutorBadge:   { alignItems: "center", gap: 4, flexShrink: 0 },
-  tutorAvatar:  {
+  subjectIcon: {
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: CARD_BG, alignItems: "center", justifyContent: "center",
+    alignItems: "center", justifyContent: "center",
   },
-  tutorAvatarText: { color: PRIMARY, fontSize: 11, fontWeight: "700" },
-  tutorName:    { fontSize: 10, color: "#64748b", fontWeight: "500", width: 80, textAlign: "center" },
+  cardTitle: { ...SW.type.headlineMd, color: SW.color.onSurface, marginBottom: 8 },
 
-  cardDivider:  { height: 1, backgroundColor: "#f1f5f9" },
-  cardActions:  { flexDirection: "row", paddingHorizontal: 14, paddingVertical: 10, gap: 8, justifyContent: "flex-end" },
-  cancelBtn:    { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: "#fecaca", backgroundColor: "#fff1f1" },
-  cancelBtnText:{ color: "#ef4444", fontSize: 13, fontWeight: "600" },
-  joinBtn:      { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: PRIMARY },
-  joinBtnText:  { color: "#fff", fontSize: 13, fontWeight: "700" },
+  withRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" },
+  withLabel: { ...SW.type.bodyMd, fontSize: 14, color: SW.color.muted },
+  personChip: {
+    backgroundColor: SW.color.surfaceLow,
+    borderRadius: SW.radius.full,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  personChipText: { ...SW.type.labelMd, color: SW.color.onSurface },
 
-  emptyContainer: { alignItems: "center", paddingTop: 80, gap: 12 },
-  emptyTitle:     { color: "#64748b", fontSize: 18, fontWeight: "700" },
-  emptyBody:      { color: "#94a3b8", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+  metaText: { ...SW.type.bodyMd, fontSize: 14, color: SW.color.onSurfaceVariant },
 
-  notesBtn:     { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: CARD_BG, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
-  notesBtnText: { color: PRIMARY, fontSize: 13, fontWeight: "600" },
+  actionRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 12 },
+  cancelCircle: {
+    width: 48, height: 48, borderRadius: 24,
+    borderWidth: 1.5, borderColor: SW.color.outline,
+    alignItems: "center", justifyContent: "center",
+  },
+  msgCircle: {
+    width: 48, height: 48, borderRadius: 24,
+    borderWidth: 1.5, borderColor: SW.color.primarySoft,
+    backgroundColor: SW.color.lavenderSoft,
+    alignItems: "center", justifyContent: "center",
+  },
 
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)" },
+  modalRoot: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)", justifyContent: "flex-end" },
   notesSheet: {
-    backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    backgroundColor: SW.color.card,
+    borderTopLeftRadius: SW.radius.xl,
+    borderTopRightRadius: SW.radius.xl,
     padding: 24, gap: 12, maxHeight: "70%",
+    overflow: "hidden",
   },
-  notesHandle:   { width: 40, height: 4, borderRadius: 2, backgroundColor: "#e2e8f0", alignSelf: "center", marginBottom: 4 },
-  notesTitle:    { fontSize: 18, fontWeight: "800", color: "#0f172a" },
-  notesSub:      { fontSize: 13, color: "#64748b", marginBottom: 4 },
+  notesHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: SW.color.outline, alignSelf: "center", marginBottom: 4 },
+  notesTitle: { ...SW.type.headlineMd, color: SW.color.onSurface },
+  notesSub: { ...SW.type.bodyMd, fontSize: 13, color: SW.color.muted, marginBottom: 4 },
   notesScrollArea: { flexGrow: 0, maxHeight: 260 },
-  notesContent:  { fontSize: 14, color: "#1e293b", lineHeight: 22 },
-  notesEmpty:    { alignItems: "center", paddingVertical: 32, gap: 10 },
-  notesEmptyTitle: { color: "#64748b", fontSize: 16, fontWeight: "600" },
-  notesEmptyBody:  { color: "#94a3b8", fontSize: 13, textAlign: "center", lineHeight: 18, maxWidth: 240 },
-  notesDoneBtn:     { backgroundColor: PRIMARY, borderRadius: 14, paddingVertical: 14, alignItems: "center", marginTop: 4 },
-  notesDoneBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  notesContent: { ...SW.type.bodyMd, color: SW.color.onSurfaceVariant },
 });

@@ -11,7 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { USE_MOCK } from "../constants/mockData";
 import { useAuth } from "../context/auth";
 import { supabase } from "../lib/supabase";
 
@@ -47,6 +48,7 @@ function buildDefaultDays(avail: Record<string, { start: string; end: string }>)
 }
 
 export default function EditAvailabilityScreen() {
+  const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const [days,   setDays]   = useState<DayEntry[]>(buildDefaultDays({}));
   const [saving, setSaving] = useState(false);
@@ -98,6 +100,13 @@ export default function EditAvailabilityScreen() {
     const availability: Record<string, { start: string; end: string }> = {};
     active.forEach((d) => { availability[d.day] = { start: d.start.trim(), end: d.end.trim() }; });
 
+    if (USE_MOCK) {
+      Alert.alert("Saved!", "Your availability has been updated.", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+      return;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     const userId = profile?.id ?? user?.id;
     if (!userId) {
@@ -121,9 +130,9 @@ export default function EditAvailabilityScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color={PRIMARY} />
         </TouchableOpacity>

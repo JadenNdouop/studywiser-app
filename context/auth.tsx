@@ -1,5 +1,6 @@
 import { Session, User } from '@supabase/supabase-js'
 import { createContext, useContext, useEffect, useState } from 'react'
+import { MOCK_PROFILE, USE_MOCK } from '../constants/mockData'
 import { supabase } from '../lib/supabase'
 
 type Profile = {
@@ -7,6 +8,8 @@ type Profile = {
   full_name: string | null
   email: string | null
   phone: string | null
+  dob: string | null
+  avatar_url: string | null
   role: 'parent' | 'tutor' | 'student'
 }
 
@@ -29,9 +32,9 @@ const AuthContext = createContext<AuthContextType>({
 })
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null)
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [session, setSession] = useState<Session | null>(USE_MOCK ? ({} as Session) : null)
+  const [profile, setProfile] = useState<Profile | null>(USE_MOCK ? MOCK_PROFILE : null)
+  const [loading, setLoading] = useState(!USE_MOCK)
 
   async function fetchProfile(userId: string) {
     const { data } = await supabase
@@ -50,6 +53,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: user.email ?? null,
           full_name: user.user_metadata?.full_name ?? null,
           phone: null,
+          dob: null,
+          avatar_url: null,
           role: (user.user_metadata?.role ?? 'parent') as 'parent' | 'tutor' | 'student',
         }
         await supabase.from('profiles').upsert(newProfile)
@@ -68,6 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
+    if (USE_MOCK) return;
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       if (session?.user) fetchProfile(session.user.id)

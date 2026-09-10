@@ -7,7 +7,10 @@
       "Bash(cp -r /Users/jadenndouop/studywiser-app/context /Users/jadenndouop/studywiser-app/.claude/worktrees/mystifying-black/context)",
       "Bash(npx tsc:*)",
       "Bash(cat:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(python3 -m http.server 8420)",
+      "Bash(pkill -f \"http.server 8420\")",
+      "Bash(rm -rf /Users/jadenndouop/Developer/beauty-by-yoko/.claude)"
     ]
   }
 }

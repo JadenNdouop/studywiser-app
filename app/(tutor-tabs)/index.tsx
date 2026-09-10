@@ -1,37 +1,22 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { SWEmptyState, SWHeader, SWSectionHeader, SWStatTile, avatarTint, getInitials, subjectTint } from "../../components/sw";
+import { MOCK_TUTOR_SESSIONS, USE_MOCK } from "../../constants/mockData";
+import { SW } from "../../constants/theme";
 import { useAuth } from "../../context/auth";
 import { formatTime } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
 
-const PRIMARY = "#014aad";
-const CARD_BG = "#eef2ff";
+const PRIMARY = SW.color.primary;
 
 function getGreeting() {
   const h = new Date().getHours();
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
-}
-
-const TODAY_DATE = new Date().toLocaleDateString("en-US", {
-  weekday: "long", month: "long", day: "numeric",
-});
-
-function getInitials(name: string): string {
-  const parts = name.trim().split(" ");
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-const AVATAR_COLORS = ["#c7d2fe","#fde8d8","#d1fae5","#fef9c3","#fee2e2","#ddd6fe"];
-function avatarColor(id: string) {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
 type SessionRow = {
@@ -42,6 +27,7 @@ type SessionRow = {
   duration: number;
   format: string;
   student_name: string;
+  meeting_url: string | null;
 };
 
 export default function TutorHomeScreen() {
@@ -59,6 +45,18 @@ export default function TutorHomeScreen() {
 
   async function loadData() {
     if (sessions.length === 0) setLoading(true);
+    if (USE_MOCK) {
+      const today = new Date().toISOString().split("T")[0];
+      const upcoming = MOCK_TUTOR_SESSIONS.filter((s) => s.status === "upcoming" && s.session_date >= today);
+      setSessions(upcoming.map((s) => ({ id: s.id, subject: s.subject, session_date: s.session_date, session_time: s.session_time, duration: s.duration, format: s.format, student_name: s.student_name, meeting_url: s.meeting_url ?? null })));
+      setStats({
+        thisWeek:  upcoming.length,
+        pending:   MOCK_TUTOR_SESSIONS.filter((s) => s.status === "pending").length,
+        completed: MOCK_TUTOR_SESSIONS.filter((s) => s.status === "completed").length,
+      });
+      setLoading(false);
+      return;
+    }
     const userId = profile!.id;
     const today  = new Date().toISOString().split("T")[0];
     const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
@@ -67,7 +65,7 @@ export default function TutorHomeScreen() {
     const { data: sessionData } = await supabase
       .from("sessions")
       .select(`
-        id, subject, session_date, session_time, duration, format,
+        id, subject, session_date, session_time, duration, format, meeting_url,
         student_profile:profiles!sessions_student_profile_id_fkey(full_name),
         managed_student:students!sessions_student_id_fkey(full_name)
       `)
@@ -86,6 +84,7 @@ export default function TutorHomeScreen() {
       duration: s.duration,
       format: s.format,
       student_name: s.student_profile?.full_name ?? s.managed_student?.full_name ?? "Student",
+      meeting_url: s.meeting_url ?? null,
     }));
     setSessions(mapped);
 
@@ -125,126 +124,137 @@ export default function TutorHomeScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["left", "right"]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        <SWHeader initials={getInitials(profile?.full_name)} />
 
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>{getGreeting()}, {firstName} 👋</Text>
-            <Text style={styles.dateText}>{TODAY_DATE}</Text>
-          </View>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => router.push("/notifications")}>
-            <Ionicons name="notifications-outline" size={20} color={PRIMARY} />
-          </TouchableOpacity>
+        {/* Greeting */}
+        <View style={styles.headingWrap}>
+          <Text style={styles.heading}>{getGreeting()}, {firstName}!</Text>
+          <Text style={styles.subheading}>Ready to inspire some young minds today?</Text>
         </View>
 
-        {/* Next Session card */}
+        {/* Next Session hero */}
         {nextSession ? (
           <View style={styles.nextCard}>
-            <Text style={styles.nextLabel}>NEXT SESSION</Text>
-            <View style={styles.nextTop}>
-              <View style={[styles.nextAvatar, { backgroundColor: "rgba(255,255,255,0.2)" }]}>
-                <Text style={styles.nextAvatarText}>{getInitials(nextSession.student_name)}</Text>
+            <View style={styles.nextTopRow}>
+              <View style={styles.nextBadge}>
+                <Text style={styles.nextBadgeText}>UPCOMING NOW</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.nextName}>{nextSession.student_name}</Text>
-                <Text style={styles.nextSubject}>{nextSession.subject}</Text>
+              <View style={styles.nextIconTile}>
+                <Ionicons name={subjectTint(nextSession.subject).icon as any} size={24} color="#fff" />
               </View>
             </View>
+            <Text style={styles.nextName}>{nextSession.student_name}</Text>
+            <Text style={styles.nextSubject}>{nextSession.subject}</Text>
             <View style={styles.nextMeta}>
               {(() => { const d = formatDate(nextSession.session_date); return (
                 <View style={styles.nextMetaPill}>
-                  <Ionicons name="today-outline" size={13} color="rgba(255,255,255,0.8)" />
-                  <Text style={styles.nextMetaText}>{d.label}</Text>
+                  <Ionicons name="time-outline" size={14} color="#fff" />
+                  <Text style={styles.nextMetaText}>{d.label} at {formatTime(nextSession.session_time)}</Text>
                 </View>
               ); })()}
               <View style={styles.nextMetaPill}>
-                <Ionicons name="time-outline" size={13} color="rgba(255,255,255,0.8)" />
-                <Text style={styles.nextMetaText}>{formatTime(nextSession.session_time)}</Text>
-              </View>
-              <View style={styles.nextMetaPill}>
-                <Ionicons name="hourglass-outline" size={13} color="rgba(255,255,255,0.8)" />
+                <Ionicons name="stopwatch-outline" size={14} color="#fff" />
                 <Text style={styles.nextMetaText}>{nextSession.duration} min</Text>
               </View>
             </View>
             {nextSession.format === "Virtual" ? (
-              <TouchableOpacity
-                style={styles.joinBtn}
-                onPress={() => Alert.alert("Join Session", "Opening meeting link…")}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="videocam-outline" size={18} color={PRIMARY} />
-                <Text style={styles.joinBtnText}>Join Session</Text>
-              </TouchableOpacity>
+              nextSession.meeting_url ? (
+                <TouchableOpacity
+                  style={styles.joinBtn}
+                  onPress={() => Linking.openURL(nextSession.meeting_url!)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.joinBtnText}>Join Session</Text>
+                  <Ionicons name="videocam-outline" size={18} color={PRIMARY} />
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.inPersonRow}>
+                  <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.8)" />
+                  <Text style={styles.inPersonText}>Add a meeting link from your Schedule</Text>
+                </View>
+              )
             ) : (
               <View style={styles.inPersonRow}>
-                <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.7)" />
+                <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.8)" />
                 <Text style={styles.inPersonText}>In-person — location sent separately</Text>
               </View>
             )}
           </View>
         ) : (
           <View style={styles.noSessionCard}>
-            <Ionicons name="calendar-outline" size={32} color="rgba(255,255,255,0.5)" />
+            <Ionicons name="calendar-outline" size={32} color="rgba(255,255,255,0.6)" />
             <Text style={styles.noSessionText}>No upcoming sessions scheduled</Text>
           </View>
         )}
 
         {/* Stats */}
         <View style={styles.statsRow}>
-          {[
-            { label: "This Week", value: stats.thisWeek,  icon: "calendar-outline",         filter: "upcoming"  },
-            { label: "Pending",   value: stats.pending,   icon: "time-outline",             filter: "pending"   },
-            { label: "Completed", value: stats.completed, icon: "checkmark-circle-outline", filter: "completed" },
-          ].map((s) => (
-            <TouchableOpacity
-              key={s.label}
-              style={styles.statChip}
-              onPress={() => router.push({ pathname: "/all-sessions", params: { filter: s.filter } } as any)}
-              activeOpacity={0.75}
-            >
-              <Ionicons name={s.icon as any} size={18} color={PRIMARY} style={{ marginBottom: 4 }} />
-              <Text style={styles.statValue}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
-            </TouchableOpacity>
-          ))}
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            onPress={() => router.push({ pathname: "/all-sessions", params: { filter: "upcoming" } } as any)}
+            activeOpacity={0.8}
+          >
+            <SWStatTile value={stats.thisWeek} label="Sessions this week" variant="mint" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            onPress={() => router.push({ pathname: "/all-sessions", params: { filter: "pending" } } as any)}
+            activeOpacity={0.8}
+          >
+            <SWStatTile value={stats.pending} label="Pending requests" variant="coral" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            onPress={() => router.push({ pathname: "/all-sessions", params: { filter: "completed" } } as any)}
+            activeOpacity={0.8}
+          >
+            <SWStatTile value={stats.completed} label="Completed" variant="lavender" />
+          </TouchableOpacity>
         </View>
 
         {/* Coming up */}
-        {comingUp.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Coming Up</Text>
-            <View style={styles.upcomingList}>
-              {comingUp.map((s, i) => {
+        <View style={styles.section}>
+          <SWSectionHeader
+            title="Coming Up Next"
+            actionLabel="View Calendar"
+            onAction={() => router.push("/(tutor-tabs)/schedule")}
+          />
+          {comingUp.length === 0 ? (
+            <SWEmptyState
+              icon="calendar-outline"
+              title="Nothing coming up"
+              subtitle="Accept a request to fill your schedule."
+            />
+          ) : (
+            <View style={{ gap: SW.space.stack }}>
+              {comingUp.map((s) => {
                 const d = formatDate(s.session_date);
-                const color = avatarColor(s.id);
+                const tint = avatarTint(s.id);
+                const subj = subjectTint(s.subject);
                 return (
-                  <View key={s.id}>
-                    <View style={styles.upcomingRow}>
-                      <View style={styles.datePill}>
-                        <Text style={styles.datePillDay}>{d.label.toUpperCase().slice(0,3)}</Text>
-                        <Text style={styles.datePillNum}>{d.num}</Text>
-                      </View>
-                      <View style={styles.upcomingInfo}>
-                        <Text style={styles.upcomingName}>{s.student_name}</Text>
+                  <View key={s.id} style={styles.upcomingCard}>
+                    <View style={[styles.upcomingAvatar, { backgroundColor: tint.bg }]}>
+                      <Text style={[styles.upcomingAvatarText, { color: tint.fg }]}>{getInitials(s.student_name)}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.upcomingName}>{s.student_name}</Text>
+                      <View style={styles.upcomingSubjectRow}>
+                        <Ionicons name={subj.icon as any} size={13} color={SW.color.onSurfaceVariant} />
                         <Text style={styles.upcomingSubject}>{s.subject}</Text>
-                        <View style={styles.upcomingTimeLine}>
-                          <Ionicons name="time-outline" size={12} color="#94a3b8" />
-                          <Text style={styles.upcomingTime}>{formatTime(s.session_time)} · {s.duration} min</Text>
-                        </View>
-                      </View>
-                      <View style={[styles.upcomingAvatar, { backgroundColor: color }]}>
-                        <Text style={styles.upcomingAvatarText}>{getInitials(s.student_name)}</Text>
                       </View>
                     </View>
-                    {i < comingUp.length - 1 && <View style={styles.divider} />}
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={styles.upcomingDate}>{d.label}</Text>
+                      <Text style={styles.upcomingTime}>{formatTime(s.session_time)}</Text>
+                    </View>
                   </View>
                 );
               })}
             </View>
-          </View>
-        )}
+          )}
+        </View>
 
       </ScrollView>
     </SafeAreaView>
@@ -252,76 +262,73 @@ export default function TutorHomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#fff" },
-  scroll: { paddingBottom: 110 },
+  safe: { flex: 1, backgroundColor: SW.color.surface },
+  scroll: { paddingBottom: 130 },
 
-  header: {
-    flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between",
-    paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20,
-  },
-  greeting: { fontSize: 24, fontWeight: "800", color: "#0f172a" },
-  dateText:  { fontSize: 13, color: "#94a3b8", marginTop: 2 },
-  iconBtn: {
-    width: 42, height: 42, borderRadius: 21,
-    backgroundColor: CARD_BG, alignItems: "center", justifyContent: "center", marginTop: 4,
-  },
+  headingWrap: { paddingHorizontal: SW.space.margin, marginBottom: 20 },
+  heading: { ...SW.type.headlineLg, fontSize: 32, lineHeight: 40, color: SW.color.onSurface },
+  subheading: { ...SW.type.bodyLg, color: SW.color.muted, marginTop: 6 },
 
   nextCard: {
-    backgroundColor: PRIMARY, borderRadius: 24,
-    marginHorizontal: 20, padding: 20, marginBottom: 20, gap: 14,
+    backgroundColor: SW.color.primaryContainer,
+    borderRadius: SW.radius.xl,
+    marginHorizontal: SW.space.margin,
+    padding: SW.space.cardPad + 4,
+    marginBottom: 20,
+    ...SW.shadow(SW.color.primaryContainer, 0.35),
   },
-  nextLabel: { color: "rgba(255,255,255,0.6)", fontSize: 11, fontWeight: "700", letterSpacing: 1.2 },
-  nextTop: { flexDirection: "row", alignItems: "center", gap: 14 },
-  nextAvatar: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
-  nextAvatarText: { color: "#fff", fontSize: 18, fontWeight: "700" },
-  nextName: { color: "#fff", fontSize: 18, fontWeight: "700", marginBottom: 3 },
-  nextSubject: { color: "rgba(255,255,255,0.75)", fontSize: 13 },
-  nextMeta: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  nextTopRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 },
+  nextBadge: {
+    backgroundColor: "rgba(255,255,255,0.22)",
+    borderRadius: SW.radius.full, paddingHorizontal: 12, paddingVertical: 6,
+  },
+  nextBadgeText: { ...SW.type.labelSm, color: "#fff", letterSpacing: 1 },
+  nextIconTile: {
+    width: 52, height: 52, borderRadius: SW.radius.md,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignItems: "center", justifyContent: "center",
+  },
+  nextName: { fontFamily: SW.font.bold, fontSize: 26, lineHeight: 32, color: "#fff" },
+  nextSubject: { ...SW.type.bodyLg, color: "rgba(255,255,255,0.9)", marginTop: 2, marginBottom: 16 },
+  nextMeta: { flexDirection: "row", gap: 10, flexWrap: "wrap", marginBottom: 18 },
   nextMetaPill: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
+    flexDirection: "row", alignItems: "center", gap: 6,
+    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.35)",
+    borderRadius: SW.radius.full, paddingHorizontal: 14, paddingVertical: 8,
   },
-  nextMetaText: { color: "rgba(255,255,255,0.9)", fontSize: 12, fontWeight: "500" },
+  nextMetaText: { ...SW.type.labelMd, color: "#fff" },
   joinBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 8, backgroundColor: "#fff", borderRadius: 30, paddingVertical: 13,
+    gap: 8, backgroundColor: "#fff", borderRadius: SW.radius.full, paddingVertical: 15,
   },
-  joinBtnText: { color: PRIMARY, fontSize: 15, fontWeight: "700" },
+  joinBtnText: { fontFamily: SW.font.bold, fontSize: 17, color: PRIMARY },
   inPersonRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  inPersonText: { color: "rgba(255,255,255,0.65)", fontSize: 12 },
+  inPersonText: { ...SW.type.bodyMd, fontSize: 13, color: "rgba(255,255,255,0.8)" },
 
   noSessionCard: {
-    backgroundColor: PRIMARY, borderRadius: 24,
-    marginHorizontal: 20, padding: 28, marginBottom: 20,
+    backgroundColor: SW.color.primaryContainer,
+    borderRadius: SW.radius.xl,
+    marginHorizontal: SW.space.margin, padding: 28, marginBottom: 20,
     alignItems: "center", gap: 10,
+    ...SW.shadow(SW.color.primaryContainer, 0.3),
   },
-  noSessionText: { color: "rgba(255,255,255,0.6)", fontSize: 14, fontWeight: "500" },
+  noSessionText: { ...SW.type.bodyMd, color: "rgba(255,255,255,0.8)" },
 
-  statsRow: { flexDirection: "row", marginHorizontal: 20, gap: 10, marginBottom: 28 },
-  statChip: {
-    flex: 1, alignItems: "center",
-    backgroundColor: CARD_BG, borderRadius: 18, paddingVertical: 14,
-  },
-  statValue: { color: PRIMARY, fontSize: 20, fontWeight: "800" },
-  statLabel: { color: "#64748b", fontSize: 11, marginTop: 2 },
+  statsRow: { flexDirection: "row", marginHorizontal: SW.space.margin, gap: 12, marginBottom: 28 },
 
-  section: { paddingHorizontal: 20 },
-  sectionTitle: { fontSize: 17, fontWeight: "700", color: "#0f172a", marginBottom: 14 },
-  upcomingList: { borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 20, overflow: "hidden" },
-  upcomingRow: { flexDirection: "row", alignItems: "center", gap: 14, padding: 16 },
-  datePill: {
-    width: 46, alignItems: "center",
-    backgroundColor: CARD_BG, borderRadius: 14, paddingVertical: 8,
+  section: { paddingHorizontal: SW.space.margin },
+
+  upcomingCard: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    backgroundColor: SW.color.card, borderRadius: SW.radius.lg,
+    paddingHorizontal: 16, paddingVertical: 14,
+    ...SW.shadow(SW.color.outline, 0.2),
   },
-  datePillDay: { color: PRIMARY, fontSize: 10, fontWeight: "700", letterSpacing: 0.5 },
-  datePillNum: { color: "#0f172a", fontSize: 18, fontWeight: "800", marginTop: 2 },
-  upcomingInfo: { flex: 1, gap: 2 },
-  upcomingName: { color: "#0f172a", fontSize: 14, fontWeight: "700" },
-  upcomingSubject: { color: "#64748b", fontSize: 12 },
-  upcomingTimeLine: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
-  upcomingTime: { color: "#94a3b8", fontSize: 11 },
-  upcomingAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  upcomingAvatarText: { color: PRIMARY, fontSize: 14, fontWeight: "700" },
-  divider: { height: 1, backgroundColor: "#f1f5f9", marginHorizontal: 16 },
+  upcomingAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  upcomingAvatarText: { fontFamily: SW.font.bold, fontSize: 16 },
+  upcomingName: { ...SW.type.bodyLg, fontFamily: SW.font.bold, fontSize: 16, color: SW.color.onSurface },
+  upcomingSubjectRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 },
+  upcomingSubject: { ...SW.type.bodyMd, fontSize: 13, color: SW.color.onSurfaceVariant },
+  upcomingDate: { ...SW.type.labelMd, color: PRIMARY },
+  upcomingTime: { ...SW.type.labelSm, fontFamily: SW.font.medium, color: SW.color.muted, marginTop: 2 },
 });

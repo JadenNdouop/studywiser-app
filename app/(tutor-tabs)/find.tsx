@@ -3,11 +3,13 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { SWHeader, avatarTint, getInitials, subjectTint } from "../../components/sw";
+import { MOCK_SESSION_REQUESTS, USE_MOCK } from "../../constants/mockData";
+import { SW } from "../../constants/theme";
 import { useAuth } from "../../context/auth";
 import { supabase } from "../../lib/supabase";
 
-const PRIMARY = "#014aad";
-const CARD_BG = "#eef2ff";
+const PRIMARY = SW.color.primary;
 
 /* ─── Subject → tier & price ─── */
 const SUBJECT_TIER: Record<string, "Basic" | "Upper" | "SAT"> = {};
@@ -27,37 +29,10 @@ function sessionPrice(subject: string, duration: number): number {
   return parseFloat((TIER_PRICE[tier] * (duration / 60)).toFixed(2));
 }
 
-/* ─── Tier styling ─── */
-const TIER_STYLE: Record<string, { color: string; bg: string }> = {
-  Basic: { color: "#0369a1", bg: "#e0f2fe" },
-  Upper: { color: "#7c3aed", bg: "#ede9fe" },
-  SAT:   { color: "#b45309", bg: "#fef3c7" },
-};
-
-/* ─── Frequency badge ─── */
-const FREQ_STYLE: Record<string, { color: string; bg: string }> = {
-  "One-time":  { color: "#64748b", bg: "#f1f5f9" },
-  "Weekly":    { color: "#065f46", bg: "#d1fae5" },
-  "Biweekly":  { color: "#1e40af", bg: "#dbeafe" },
-  "Monthly":   { color: "#7c3aed", bg: "#ede9fe" },
-};
 function freqLabel(frequency: string, count: number): string {
   if (frequency === "One-time" || !count) return frequency ?? "One-time";
   const unit = frequency === "Weekly" ? "wk" : frequency === "Biweekly" ? "2 wks" : "mo";
   return `${count}× / ${unit}`;
-}
-
-/* ─── Avatar helpers ─── */
-const AVATAR_COLORS = ["#c7d2fe","#fde8d8","#d1fae5","#fef9c3","#fee2e2","#ddd6fe","#fce7f3","#ccfbf1"];
-function avatarColor(id: string) {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
-function getInitials(name: string): string {
-  const parts = name.trim().split(" ");
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 type RequestRow = {
@@ -93,12 +68,17 @@ export default function TutorFindScreen() {
 
   async function loadRequests() {
     if (requests.length === 0) setLoading(true);
+    if (USE_MOCK) {
+      setRequests(MOCK_SESSION_REQUESTS.filter((r) => r.format === format) as any);
+      setLoading(false);
+      return;
+    }
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("session_requests")
         .select(`
-          id, subject, format, frequency, sessions_per_period,
-          preferred_date, preferred_time, duration, zip, notes,
+          id, subject, format, frequency, duration_hours,
+          preferred_date, preferred_time, zip, notes,
           session_type, grade_level,
           parent_id, student_profile_id, student_id,
           student_profile:profiles!session_requests_student_profile_id_fkey(full_name),
@@ -107,6 +87,12 @@ export default function TutorFindScreen() {
         .eq("status", "pending")
         .is("tutor_id", null)
         .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error("loadRequests error", error);
+        Alert.alert("Couldn't load requests", error.message);
+        return;
+      }
 
       const mapped: RequestRow[] = (data ?? []).map((r: any) => ({
         id:                  r.id,
@@ -119,10 +105,10 @@ export default function TutorFindScreen() {
         session_type:        r.session_type ?? "Individual",
         format:              r.format ?? "Virtual",
         frequency:           r.frequency ?? "One-time",
-        sessions_per_period: r.sessions_per_period ?? 1,
+        sessions_per_period: 1,
         preferred_date:      r.preferred_date ?? "",
         preferred_time:      r.preferred_time ?? "",
-        duration:            r.duration ?? 60,
+        duration:            Math.round((r.duration_hours ?? 1) * 60),
         zip:                 r.zip ?? null,
         notes:               r.notes ?? null,
       }));
@@ -146,35 +132,37 @@ export default function TutorFindScreen() {
 
             const price = sessionPrice(req.subject, req.duration);
 
-            // 1. Create session record
-            const { error: sessionErr } = await supabase.from("sessions").insert({
-              tutor_id:           profile!.id,
-              student_profile_id: req.student_profile_id,
-              student_id:         req.student_id,
-              parent_id:          req.parent_id,
-              subject:            req.subject,
-              subject_tier:       (SUBJECT_TIER[req.subject] ?? "Basic").toLowerCase(),
-              session_type:       "individual",
-              session_date:       req.preferred_date,
-              session_time:       req.preferred_time,
-              duration:           req.duration,
-              format:             req.format,
-              frequency:          req.frequency,
-              status:             "upcoming",
-              price,
-            });
+            if (!USE_MOCK) {
+              // 1. Create session record
+              const { error: sessionErr } = await supabase.from("sessions").insert({
+                tutor_id:           profile!.id,
+                student_profile_id: req.student_profile_id,
+                student_id:         req.student_id,
+                parent_id:          req.parent_id,
+                subject:            req.subject,
+                subject_tier:       (SUBJECT_TIER[req.subject] ?? "Basic").toLowerCase(),
+                session_type:       "individual",
+                session_date:       req.preferred_date,
+                session_time:       req.preferred_time,
+                duration:           req.duration,
+                format:             req.format,
+                frequency:          req.frequency,
+                status:             "upcoming",
+                price,
+              });
 
-            if (sessionErr) {
-              setAccepting(null);
-              Alert.alert("Error", "Could not create session. Please try again.");
-              return;
+              if (sessionErr) {
+                setAccepting(null);
+                Alert.alert("Error", "Could not create session. Please try again.");
+                return;
+              }
+
+              // 2. Mark request as accepted
+              await supabase
+                .from("session_requests")
+                .update({ status: "accepted", tutor_id: profile!.id })
+                .eq("id", req.id);
             }
-
-            // 2. Mark request as accepted
-            await supabase
-              .from("session_requests")
-              .update({ status: "accepted", tutor_id: profile!.id })
-              .eq("id", req.id);
 
             // 3. Remove from local list
             setRequests((prev) => prev.filter((r) => r.id !== req.id));
@@ -199,37 +187,29 @@ export default function TutorFindScreen() {
     );
 
   return (
-    <SafeAreaView style={styles.safe}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Find Students</Text>
-        <Text style={styles.headerSub}>Browse open session requests</Text>
+    <SafeAreaView style={styles.safe} edges={["left", "right"]}>
+      <SWHeader initials={getInitials(profile?.full_name)} />
+
+      <View style={styles.headingWrap}>
+        <Text style={styles.heading}>Find Students</Text>
+        <Text style={styles.subheading}>Browse open session requests</Text>
       </View>
 
       {/* Virtual / In-Person toggle */}
       <View style={styles.toggleRow}>
         {(["Virtual", "In-Person"] as const).map((f) => {
           const count = f === "Virtual" ? virtualCount : inPersonCount;
+          const active = format === f;
           return (
             <TouchableOpacity
               key={f}
-              style={[styles.togglePill, format === f && styles.togglePillActive]}
+              style={[styles.togglePill, active && styles.togglePillActive]}
               onPress={() => setFormat(f)}
               activeOpacity={0.75}
             >
-              <Ionicons
-                name={f === "Virtual" ? "videocam-outline" : "location-outline"}
-                size={15}
-                color={format === f ? "#fff" : "#64748b"}
-              />
-              <Text style={[styles.togglePillText, format === f && styles.togglePillTextActive]}>
-                {f}
+              <Text style={[styles.togglePillText, active && styles.togglePillTextActive]}>
+                {f} ({count})
               </Text>
-              <View style={[styles.countBubble, format === f ? styles.countBubbleActive : styles.countBubbleInactive]}>
-                <Text style={[styles.countBubbleText, format === f && styles.countBubbleTextActive]}>
-                  {count}
-                </Text>
-              </View>
             </TouchableOpacity>
           );
         })}
@@ -237,7 +217,7 @@ export default function TutorFindScreen() {
 
       {format === "In-Person" && (
         <View style={styles.sortHint}>
-          <Ionicons name="funnel-outline" size={12} color="#94a3b8" />
+          <Ionicons name="funnel-outline" size={12} color={SW.color.muted} />
           <Text style={styles.sortHintText}>Sorted by zip code</Text>
         </View>
       )}
@@ -280,9 +260,8 @@ function RequestCard({
   accepting: boolean;
   onAccept: () => void;
 }) {
-  const tier = TIER_STYLE[SUBJECT_TIER[req.subject] ?? "Basic"] ?? TIER_STYLE.Basic;
-  const freq = FREQ_STYLE[req.frequency]                         ?? FREQ_STYLE["One-time"];
-  const color = avatarColor(req.id);
+  const tint = avatarTint(req.id);
+  const subj = subjectTint(req.subject);
 
   const dateLabel = req.preferred_date
     ? (() => {
@@ -293,62 +272,60 @@ function RequestCard({
 
   return (
     <View style={styles.card}>
-      {/* Row 1: avatar + name/grade/subject + zip */}
+      {/* Row 1: avatar + name + grade */}
       <View style={styles.cardTop}>
-        <View style={[styles.avatar, { backgroundColor: color }]}>
-          <Text style={styles.avatarText}>{getInitials(req.student_name)}</Text>
+        <View style={[styles.avatar, { backgroundColor: tint.bg }]}>
+          <Text style={[styles.avatarText, { color: tint.fg }]}>{getInitials(req.student_name)}</Text>
         </View>
-        <View style={{ flex: 1, flexDirection: "row", alignItems: "flex-start" }}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cardName}>{req.student_name}</Text>
-            <Text style={styles.cardMeta}>
-              {req.grade ? `${req.grade}` : ""}
-              {req.session_type === "Group" ? (req.grade ? " · Group" : "Group") : ""}
-            </Text>
-          </View>
-          <View style={styles.cardRight}>
-            <View style={[styles.subjectPill, { backgroundColor: tier.bg }]}>
-              <Text style={[styles.subjectPillText, { color: tier.color }]}>{req.subject}</Text>
-            </View>
-            {req.zip && (
-              <View style={styles.zipBadge}>
-                <Ionicons name="location-outline" size={11} color="#64748b" />
-                <Text style={styles.zipText}>{req.zip}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.cardName}>{req.student_name}</Text>
+          <View style={styles.gradeRow}>
+            {req.grade ? (
+              <View style={styles.gradeChip}>
+                <Text style={styles.gradeChipText}>{req.grade}</Text>
               </View>
-            )}
+            ) : null}
+            {req.session_type === "Group" ? (
+              <View style={styles.gradeChip}>
+                <Text style={styles.gradeChipText}>Group</Text>
+              </View>
+            ) : null}
           </View>
         </View>
+        {req.zip && (
+          <View style={styles.zipBadge}>
+            <Ionicons name="location-outline" size={12} color={SW.color.onSurfaceVariant} />
+            <Text style={styles.zipText}>{req.zip}</Text>
+          </View>
+        )}
       </View>
 
-      <View style={styles.divider} />
-
-      {/* Row 2: frequency + time + date */}
-      <View style={styles.infoRow}>
-        <View style={[styles.freqBadge, { backgroundColor: freq.bg }]}>
-          <Ionicons name="repeat-outline" size={12} color={freq.color} />
-          <Text style={[styles.freqText, { color: freq.color }]}>
+      {/* Row 2: subject + frequency chips */}
+      <View style={styles.chipRow}>
+        <View style={[styles.chip, { backgroundColor: subj.bg }]}>
+          <Ionicons name={subj.icon as any} size={13} color={subj.fg} />
+          <Text style={[styles.chipText, { color: subj.fg }]}>{req.subject}</Text>
+        </View>
+        <View style={[styles.chip, { backgroundColor: SW.color.lavenderSoft }]}>
+          <Ionicons name="repeat-outline" size={13} color={PRIMARY} />
+          <Text style={[styles.chipText, { color: PRIMARY }]}>
             {freqLabel(req.frequency, req.sessions_per_period)}
           </Text>
         </View>
-        {req.preferred_time ? (
-          <>
-            <Text style={styles.infoDot}>·</Text>
-            <Ionicons name="time-outline" size={13} color="#94a3b8" />
-            <Text style={styles.infoText}>{req.preferred_time} · {req.duration} min</Text>
-          </>
-        ) : null}
-        {dateLabel ? (
-          <>
-            <Text style={styles.infoDot}>·</Text>
-            <Text style={styles.infoText}>{dateLabel}</Text>
-          </>
-        ) : null}
       </View>
 
-      {/* Notes */}
-      {req.notes ? (
-        <Text style={styles.cardNotes} numberOfLines={2}>"{req.notes}"</Text>
-      ) : null}
+      {/* Inner panel: schedule + note */}
+      <View style={styles.innerPanel}>
+        <View style={styles.scheduleRow}>
+          <Ionicons name="calendar-outline" size={15} color={SW.color.onSurfaceVariant} />
+          <Text style={styles.scheduleText}>
+            {[dateLabel, req.preferred_time, `${req.duration} min`].filter(Boolean).join(" · ")}
+          </Text>
+        </View>
+        {req.notes ? (
+          <Text style={styles.cardNotes} numberOfLines={3}>{`"${req.notes}"`}</Text>
+        ) : null}
+      </View>
 
       {/* Accept button */}
       <TouchableOpacity
@@ -364,114 +341,102 @@ function RequestCard({
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#fff" },
+  safe: { flex: 1, backgroundColor: SW.color.surface },
 
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 14,
-  },
-  headerTitle: { fontSize: 26, fontWeight: "800", color: "#0f172a" },
-  headerSub: { fontSize: 13, color: "#94a3b8", marginTop: 3 },
+  headingWrap: { paddingHorizontal: SW.space.margin, marginBottom: 16 },
+  heading: { ...SW.type.headlineLg, fontSize: 34, lineHeight: 42, color: SW.color.onSurface },
+  subheading: { ...SW.type.bodyMd, color: SW.color.muted, marginTop: 4 },
 
   toggleRow: {
     flexDirection: "row",
-    marginHorizontal: 20,
+    marginHorizontal: SW.space.margin,
     marginBottom: 8,
-    backgroundColor: CARD_BG,
-    borderRadius: 16,
+    backgroundColor: SW.color.surfaceContainer,
+    borderRadius: SW.radius.full,
     padding: 4,
     gap: 4,
   },
   togglePill: {
     flex: 1,
-    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 11,
-    borderRadius: 13,
+    paddingVertical: 12,
+    borderRadius: SW.radius.full,
   },
-  togglePillActive: { backgroundColor: PRIMARY },
-  togglePillText: { color: "#64748b", fontSize: 14, fontWeight: "600" },
-  togglePillTextActive: { color: "#fff" },
-  countBubble: {
-    borderRadius: 10,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+  togglePillActive: {
+    backgroundColor: SW.color.card,
+    ...SW.shadow(SW.color.outline, 0.3),
   },
-  countBubbleActive: { backgroundColor: "rgba(255,255,255,0.25)" },
-  countBubbleInactive: { backgroundColor: "#fff" },
-  countBubbleText: { fontSize: 11, fontWeight: "700", color: PRIMARY },
-  countBubbleTextActive: { color: "#fff" },
+  togglePillText: { ...SW.type.labelMd, fontSize: 15, color: SW.color.onSurfaceVariant },
+  togglePillTextActive: { color: PRIMARY },
 
   sortHint: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    paddingHorizontal: 24,
+    paddingHorizontal: SW.space.margin + 4,
     marginBottom: 8,
   },
-  sortHintText: { fontSize: 12, color: "#94a3b8" },
+  sortHintText: { ...SW.type.bodyMd, fontSize: 12, color: SW.color.muted },
 
-  scroll: { paddingHorizontal: 20, paddingBottom: 110, paddingTop: 8 },
+  scroll: { paddingHorizontal: SW.space.margin, paddingBottom: 130, paddingTop: 10 },
 
   card: {
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 12,
-    gap: 10,
+    backgroundColor: SW.color.card,
+    borderRadius: SW.radius.lg,
+    padding: SW.space.cardPad,
+    marginBottom: 16,
+    gap: 14,
+    ...SW.shadow(SW.color.outline, 0.22),
   },
-  cardTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  cardTop: { flexDirection: "row", alignItems: "center", gap: 14 },
   avatar: {
-    width: 48, height: 48, borderRadius: 24,
+    width: 56, height: 56, borderRadius: 28,
     alignItems: "center", justifyContent: "center",
-    marginTop: 2,
   },
-  avatarText: { color: PRIMARY, fontSize: 16, fontWeight: "700" },
-  cardName: { fontSize: 16, fontWeight: "700", color: "#0f172a", marginBottom: 3 },
-  cardMeta: { fontSize: 12, color: "#94a3b8" },
-  cardRight: { alignItems: "flex-end", gap: 6 },
-  subjectPill: {
-    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5,
+  avatarText: { fontFamily: SW.font.bold, fontSize: 18 },
+  cardName: { ...SW.type.headlineMd, fontSize: 21, color: SW.color.onSurface },
+  gradeRow: { flexDirection: "row", gap: 6, marginTop: 4 },
+  gradeChip: {
+    backgroundColor: SW.color.surfaceContainer,
+    borderRadius: SW.radius.full, paddingHorizontal: 10, paddingVertical: 3,
   },
-  subjectPillText: { fontSize: 12, fontWeight: "700" },
+  gradeChipText: { ...SW.type.labelSm, color: SW.color.onSurfaceVariant },
   zipBadge: {
     flexDirection: "row", alignItems: "center", gap: 3,
-    backgroundColor: CARD_BG, borderRadius: 10,
-    paddingHorizontal: 8, paddingVertical: 4,
+    backgroundColor: SW.color.surfaceLow, borderRadius: SW.radius.full,
+    paddingHorizontal: 9, paddingVertical: 4, alignSelf: "flex-start",
   },
-  zipText: { fontSize: 11, color: "#64748b", fontWeight: "600" },
+  zipText: { ...SW.type.labelSm, color: SW.color.onSurfaceVariant },
 
-  divider: { height: 1, backgroundColor: "#f1f5f9" },
-
-  infoRow: {
-    flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap",
+  chipRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  chip: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    borderRadius: SW.radius.full, paddingHorizontal: 12, paddingVertical: 6,
   },
-  freqBadge: {
-    flexDirection: "row", alignItems: "center", gap: 4,
-    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
-  },
-  freqText: { fontSize: 12, fontWeight: "700" },
-  infoDot: { color: "#cbd5e1", fontSize: 14 },
-  infoText: { fontSize: 12, color: "#64748b" },
+  chipText: { ...SW.type.labelMd, fontSize: 13 },
 
-  cardNotes: { fontSize: 13, color: "#94a3b8", fontStyle: "italic", lineHeight: 18 },
+  innerPanel: {
+    backgroundColor: SW.color.surfaceLow,
+    borderRadius: SW.radius.md,
+    padding: 14,
+    gap: 8,
+  },
+  scheduleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  scheduleText: { ...SW.type.bodyMd, fontSize: 14, color: SW.color.onSurfaceVariant },
+  cardNotes: { ...SW.type.bodyMd, fontSize: 14, color: SW.color.onSurfaceVariant, fontStyle: "italic" },
 
   acceptBtn: {
     backgroundColor: PRIMARY,
-    borderRadius: 30,
-    paddingVertical: 12,
+    borderRadius: SW.radius.full,
+    paddingVertical: 15,
     alignItems: "center",
-    marginTop: 2,
+    ...SW.shadow(PRIMARY, 0.3),
   },
-  acceptBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  acceptBtnText: { fontFamily: SW.font.bold, fontSize: 16, color: "#fff" },
 
   emptyCard: {
-    backgroundColor: CARD_BG,
-    borderRadius: 24,
+    backgroundColor: SW.color.surfaceLow,
+    borderRadius: SW.radius.xl,
     paddingVertical: 48,
     paddingHorizontal: 28,
     alignItems: "center",
@@ -480,11 +445,10 @@ const styles = StyleSheet.create({
   },
   emptyIconWrap: {
     width: 64, height: 64, borderRadius: 32,
-    backgroundColor: "#fff",
+    backgroundColor: SW.color.card,
     alignItems: "center", justifyContent: "center",
-    shadowColor: PRIMARY, shadowOpacity: 0.1, shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 }, elevation: 3,
+    ...SW.shadow(PRIMARY, 0.12),
   },
-  emptyTitle: { color: "#1e293b", fontSize: 16, fontWeight: "700" },
-  emptyBody: { color: "#94a3b8", fontSize: 13, textAlign: "center", maxWidth: 240, lineHeight: 20 },
+  emptyTitle: { ...SW.type.bodyLg, fontFamily: SW.font.bold, color: SW.color.onSurface },
+  emptyBody: { ...SW.type.bodyMd, fontSize: 13, color: SW.color.muted, textAlign: "center", maxWidth: 240 },
 });

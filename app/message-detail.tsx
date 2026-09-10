@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -11,7 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { USE_MOCK } from "../constants/mockData";
 
 const PRIMARY  = "#014aad";
 const LAVENDER = "#eef2ff";
@@ -61,13 +62,31 @@ const INITIAL_MSGS: Msg[] = [
   },
 ];
 
-const CONTACT = { name: "Bradley's Parent", initials: "BP", avatarColor: "#c7d2fe" };
+const AVATAR_COLORS = ["#c7d2fe", "#fde8d8", "#d1fae5", "#fef9c3", "#fee2e2", "#ddd6fe"];
+function initialsOf(name: string) {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return (parts[0][0] ?? "?").toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+function colorFor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
 
 /* ─── Screen ─── */
 export default function MessageDetailScreen() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams<{ name?: string }>();
+  const contactName = params.name?.trim() || "Bradley's Parent";
+  const CONTACT = {
+    name: contactName,
+    initials: initialsOf(contactName),
+    avatarColor: colorFor(contactName),
+  };
   const scrollRef = useRef<ScrollView>(null);
-  const [messages, setMessages] = useState<Msg[]>(INITIAL_MSGS);
+  const [messages, setMessages] = useState<Msg[]>(USE_MOCK ? INITIAL_MSGS : []);
   const [draft, setDraft] = useState("");
 
   function sendMessage() {
@@ -84,9 +103,9 @@ export default function MessageDetailScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={[]}>
       {/* ── Header ── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={22} color={PRIMARY} />
         </TouchableOpacity>
@@ -100,9 +119,6 @@ export default function MessageDetailScreen() {
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.headerBtn}>
             <Ionicons name="call-outline" size={19} color={PRIMARY} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerBtn}>
-            <Ionicons name="videocam-outline" size={20} color={PRIMARY} />
           </TouchableOpacity>
         </View>
       </View>
@@ -120,6 +136,16 @@ export default function MessageDetailScreen() {
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
         >
+          {messages.length === 0 && (
+            <View style={styles.chatEmpty}>
+              <Ionicons name="chatbubbles-outline" size={40} color="#c1c7d3" />
+              <Text style={styles.chatEmptyTitle}>No messages yet</Text>
+              <Text style={styles.chatEmptyBody}>
+                Say hello to {CONTACT.name.split("'")[0]} to start the conversation.
+              </Text>
+            </View>
+          )}
+
           {messages.map((msg) => (
             <View
               key={msg.id}
@@ -140,12 +166,12 @@ export default function MessageDetailScreen() {
                       <Ionicons name="play" size={16} color={PRIMARY} />
                     </TouchableOpacity>
                     <View style={styles.waveform}>
-                      {[...Array(18)].map((_, i) => (
+                      {[...Array(20)].map((_, i) => (
                         <View
                           key={i}
                           style={[
                             styles.waveBar,
-                            { height: 6 + Math.sin(i * 1.1) * 10 + Math.random() * 4 },
+                            { height: 5 + Math.abs(Math.sin(i * 0.9)) * 13 },
                           ]}
                         />
                       ))}
@@ -174,19 +200,21 @@ export default function MessageDetailScreen() {
             </View>
           ))}
 
-          {/* Typing indicator */}
-          <View style={styles.typingRow}>
-            <View style={[styles.msgAvatar, { backgroundColor: CONTACT.avatarColor }]}>
-              <Text style={styles.msgAvatarText}>{CONTACT.initials}</Text>
-            </View>
-            <View style={[styles.bubble, styles.bubbleRecv, styles.typingBubble]}>
-              <View style={styles.typingDots}>
-                {[0, 1, 2].map((i) => (
-                  <View key={i} style={styles.typingDot} />
-                ))}
+          {/* Typing indicator (demo only) */}
+          {USE_MOCK && messages.length > 0 && (
+            <View style={styles.typingRow}>
+              <View style={[styles.msgAvatar, { backgroundColor: CONTACT.avatarColor }]}>
+                <Text style={styles.msgAvatarText}>{CONTACT.initials}</Text>
+              </View>
+              <View style={[styles.bubble, styles.bubbleRecv, styles.typingBubble]}>
+                <View style={styles.typingDots}>
+                  {[0, 1, 2].map((i) => (
+                    <View key={i} style={styles.typingDot} />
+                  ))}
+                </View>
               </View>
             </View>
-          </View>
+          )}
         </ScrollView>
 
         {/* ── Input bar ── */}
@@ -258,6 +286,10 @@ const styles = StyleSheet.create({
   messageList: { flex: 1, backgroundColor: "#f8faff" },
   messageListContent: { padding: 16, paddingBottom: 8, gap: 12 },
 
+  chatEmpty: { alignItems: "center", justifyContent: "center", paddingTop: 80, paddingHorizontal: 40, gap: 10 },
+  chatEmptyTitle: { fontSize: 17, fontWeight: "700", color: "#0f172a" },
+  chatEmptyBody: { fontSize: 14, color: "#94a3b8", textAlign: "center", lineHeight: 20 },
+
   msgRow: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
   msgRowSent: { justifyContent: "flex-end" },
   msgRowRecv: { justifyContent: "flex-start" },
@@ -299,20 +331,33 @@ const styles = StyleSheet.create({
   voiceBubble: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
     paddingVertical: 12,
+    paddingHorizontal: 12,
+    width: 236,
+    overflow: "hidden",
   },
   playBtn: {
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: LAVENDER,
     alignItems: "center", justifyContent: "center",
+    flexShrink: 0,
   },
-  waveform: { flex: 1, flexDirection: "row", alignItems: "center", gap: 2 },
+  waveform: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: 24,
+  },
   waveBar: {
     width: 3, borderRadius: 2,
     backgroundColor: "#c7d2fe",
   },
-  voiceDuration: { fontSize: 12, color: "#64748b", fontWeight: "500" },
+  voiceDuration: {
+    fontSize: 12, color: "#64748b", fontWeight: "500",
+    flexShrink: 0, minWidth: 30, textAlign: "right",
+  },
 
   // Typing indicator
   typingRow: { flexDirection: "row", alignItems: "flex-end", gap: 8 },

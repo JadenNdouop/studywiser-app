@@ -1,15 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { createClient } from '@supabase/supabase-js'
 import 'react-native-url-polyfill/auto'
+import { USE_MOCK } from '../constants/mockData'
 
-const supabaseUrl = 'https://vhemkzciypbwwptjejfj.supabase.co'
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZoZW1remNpeXBid3dwdGplamZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MzIzMzMsImV4cCI6MjA4OTUwODMzM30.RmrXd4PK3LAGDqEQW6eYAS3vPevh1KYPGEzZ547eGYI'
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY. ' +
+      'Add them to a .env file at the project root (see .env.example).'
+  )
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
+    autoRefreshToken: !USE_MOCK,
+    persistSession: !USE_MOCK,
     detectSessionInUrl: false,
   },
 })

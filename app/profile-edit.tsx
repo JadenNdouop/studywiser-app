@@ -1,8 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -12,35 +15,51 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { AvatarCropper } from "../components/AvatarCropper";
+import { USE_MOCK } from "../constants/mockData";
 import { useAuth } from "../context/auth";
+import { formatDOBInput, toDisplayDate, toISODate } from "../lib/dob";
+import { formatPhoneInput } from "../lib/phone";
+import { uploadAvatar } from "../lib/storage";
 import { supabase } from "../lib/supabase";
+import { useAvatarUrl } from "../lib/useAvatarUrl";
 
 const PRIMARY = "#014aad";
 const INPUT_BG = "#eef2ff";
+const FIELD_BG = "#eef1f5";
 
 export default function EditProfileScreen() {
+  const insets = useSafeAreaInsets();
   const { profile, user, refreshProfile } = useAuth();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [dob, setDob] = useState("");
   const [loading, setLoading] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [cropSourceUri, setCropSourceUri] = useState<string | null>(null);
+  const avatarUrl = useAvatarUrl(profile?.avatar_url);
 
   useEffect(() => {
     if (profile) {
       setName(profile.full_name ?? "");
       setPhone(profile.phone ?? "");
       setEmail(profile.email ?? "");
+      setDob(toDisplayDate(profile.dob));
     }
   }, [profile]);
 
   async function handleSave() {
     if (!user) return;
+    if (dob && !toISODate(dob)) {
+      Alert.alert("Invalid date", "Please enter your date of birth as MM / DD / YYYY.");
+      return;
+    }
     setLoading(true);
     const { error } = await supabase
       .from("profiles")
-      .update({ full_name: name, phone, email })
+      .update({ full_name: name, phone, email, dob: dob ? toISODate(dob) : null })
       .eq("id", user.id);
     setLoading(false);
     if (error) {
@@ -51,25 +70,71 @@ export default function EditProfileScreen() {
     }
   }
 
+  async function handlePickAvatar() {
+    if (!user) return;
+    if (USE_MOCK) {
+      Alert.alert("Demo mode", "Photo uploads are disabled in demo mode.");
+      return;
+    }
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Allow photo library access to update your profile photo.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: false,
+      quality: 1,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    setCropSourceUri(result.assets[0].uri);
+  }
+
+  async function handleCropConfirm(croppedUri: string) {
+    setCropSourceUri(null);
+    if (!user) return;
+
+    setUploadingAvatar(true);
+    try {
+      const path = await uploadAvatar(user.id, croppedUri);
+      const { error } = await supabase
+        .from("profiles")
+        .update({ avatar_url: path })
+        .eq("id", user.id);
+      if (error) throw error;
+      await refreshProfile();
+    } catch (e) {
+      Alert.alert("Upload failed", e instanceof Error ? e.message : "Could not upload photo.");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
   const initial = (name || "?").charAt(0).toUpperCase();
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={PRIMARY} />
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+          <TouchableOpacity
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/welcome"))}
+            style={styles.backCircle}
+          >
+            <Ionicons name="arrow-back" size={22} color={PRIMARY} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Profile</Text>
-          <View style={styles.backBtn} />
+          <Text style={styles.headerTitle}>Edit Profile</Text>
+          <View style={styles.headerSpacer} />
         </View>
 
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[styles.scroll, { paddingBottom: 24 + insets.bottom }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -77,47 +142,85 @@ export default function EditProfileScreen() {
           <View style={styles.avatarSection}>
             <View style={styles.avatarWrap}>
               <View style={styles.avatarCircle}>
-                <Text style={styles.avatarInitial}>{initial}</Text>
+                {avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarInitial}>{initial}</Text>
+                )}
               </View>
-              <TouchableOpacity style={styles.cameraBadge}>
-                <Ionicons name="camera-outline" size={14} color="#fff" />
+              <TouchableOpacity
+                style={styles.cameraBadge}
+                onPress={handlePickAvatar}
+                disabled={uploadingAvatar}
+              >
+                {uploadingAvatar ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="camera" size={18} color="#fff" />
+                )}
               </TouchableOpacity>
             </View>
+            <Text style={styles.avatarHelp}>
+              Your profile photo will be visible to tutors and peers during study
+              sessions.
+            </Text>
           </View>
 
-          <Text style={styles.label}>Full Name</Text>
-          <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            autoCapitalize="words"
-          />
+          {/* Fields card */}
+          <View style={styles.card}>
+            <Text style={styles.label}>Full Name</Text>
+            <View style={styles.field}>
+              <Ionicons name="person-outline" size={20} color={PRIMARY} />
+              <TextInput
+                style={styles.fieldInput}
+                value={name}
+                onChangeText={setName}
+                autoCapitalize="words"
+                placeholder="Your name"
+                placeholderTextColor="#94a3b8"
+              />
+            </View>
 
-          <Text style={styles.label}>Phone Number</Text>
-          <TextInput
-            style={styles.input}
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-          />
+            <Text style={styles.label}>Phone Number</Text>
+            <View style={styles.field}>
+              <Ionicons name="call-outline" size={20} color={PRIMARY} />
+              <TextInput
+                style={styles.fieldInput}
+                value={phone}
+                onChangeText={(t) => setPhone(formatPhoneInput(t))}
+                keyboardType="number-pad"
+                placeholder="(555) 000-0000"
+                placeholderTextColor="#94a3b8"
+              />
+            </View>
 
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
+            <Text style={styles.label}>Email Address</Text>
+            <View style={styles.field}>
+              <Ionicons name="mail-outline" size={20} color={PRIMARY} />
+              <TextInput
+                style={styles.fieldInput}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                placeholder="you@example.com"
+                placeholderTextColor="#94a3b8"
+              />
+            </View>
 
-          <Text style={styles.label}>Date Of Birth</Text>
-          <TextInput
-            style={[styles.input, { marginBottom: 36 }]}
-            value={dob}
-            onChangeText={setDob}
-            placeholder="DD / MM / YYYY"
-            placeholderTextColor="#aab4d4"
-          />
+            <Text style={styles.label}>Date of Birth</Text>
+            <View style={styles.field}>
+              <Ionicons name="calendar-outline" size={20} color={PRIMARY} />
+              <TextInput
+                style={styles.fieldInput}
+                value={dob}
+                onChangeText={(t) => setDob(formatDOBInput(t))}
+                placeholder="MM / DD / YYYY"
+                placeholderTextColor="#94a3b8"
+                keyboardType="number-pad"
+              />
+            </View>
+          </View>
 
           <TouchableOpacity
             style={[styles.saveBtn, loading && { opacity: 0.7 }]}
@@ -129,12 +232,19 @@ export default function EditProfileScreen() {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <AvatarCropper
+        visible={!!cropSourceUri}
+        uri={cropSourceUri}
+        onCancel={() => setCropSourceUri(null)}
+        onConfirm={handleCropConfirm}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#fff" },
+  safe: { flex: 1, backgroundColor: "#f7f9fb" },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -143,47 +253,83 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 8,
   },
-  backBtn: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
-  headerTitle: { color: PRIMARY, fontSize: 18, fontWeight: "700" },
-  scroll: { paddingHorizontal: 24, paddingBottom: 40 },
-  avatarSection: { alignItems: "center", paddingVertical: 24 },
-  avatarWrap: { position: "relative" },
-  avatarCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: INPUT_BG,
-    alignItems: "center",
+  backCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#eceef0",
     justifyContent: "center",
+    alignItems: "center",
   },
-  avatarInitial: { color: PRIMARY, fontSize: 36, fontWeight: "700" },
-  cameraBadge: {
-    position: "absolute",
-    bottom: 2,
-    right: 2,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: PRIMARY,
+  headerSpacer: { width: 44, height: 44 },
+  headerTitle: { color: "#191c1e", fontSize: 22, fontWeight: "700" },
+  scroll: { paddingHorizontal: 24, paddingBottom: 40 },
+  avatarSection: { alignItems: "center", paddingTop: 20, paddingBottom: 8 },
+  avatarWrap: { position: "relative", marginBottom: 16 },
+  avatarCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#e2ecfb",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
+    borderWidth: 4,
     borderColor: "#fff",
   },
-  label: { color: "#1e293b", fontSize: 14, fontWeight: "500", marginBottom: 8, marginTop: 4 },
-  input: {
-    backgroundColor: INPUT_BG,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+  avatarInitial: { color: PRIMARY, fontSize: 46, fontWeight: "700" },
+  avatarImage: { width: "100%", height: "100%", borderRadius: 60 },
+  cameraBadge: {
+    position: "absolute",
+    bottom: 4,
+    right: 4,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#00327d",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: "#f7f9fb",
+  },
+  avatarHelp: {
+    color: "#414751",
     fontSize: 14,
-    color: "#1e293b",
-    marginBottom: 16,
+    lineHeight: 21,
+    textAlign: "center",
+    paddingHorizontal: 16,
+  },
+  card: {
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    padding: 20,
+    marginTop: 20,
+    marginBottom: 24,
+    shadowColor: "#005da7",
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.06,
+    shadowRadius: 28,
+    elevation: 2,
+  },
+  label: { color: "#414751", fontSize: 14, fontWeight: "600", marginBottom: 8, marginTop: 6 },
+  field: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: FIELD_BG,
+    borderRadius: 9999,
+    paddingHorizontal: 18,
+    marginBottom: 8,
+  },
+  fieldInput: {
+    flex: 1,
+    paddingVertical: 15,
+    fontSize: 15,
+    color: "#191c1e",
   },
   saveBtn: {
     backgroundColor: PRIMARY,
-    borderRadius: 30,
-    paddingVertical: 16,
+    borderRadius: 9999,
+    paddingVertical: 17,
     alignItems: "center",
   },
   saveBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
